@@ -132,8 +132,8 @@ func (engine *Engine) BeginRead() (*Tx, Error) {
 	return &engine.rd, engine.rd.Renew()
 }
 
-func initDB(path string) (*Engine, Error) {
-	os.MkdirAll("./testdata/db", 0755)
+func initDB(path string, flags EnvFlags) (*Engine, Error) {
+	os.MkdirAll(path, 0755)
 	engine := &Engine{}
 	env, err := NewEnv()
 	if err != ErrSuccess {
@@ -154,17 +154,18 @@ func initDB(path string) (*Engine, Error) {
 		return nil, err
 	}
 
+	env.SetMaxReaders(2)
+	if err != ErrSuccess {
+		return nil, err
+	}
+
 	err = env.Open(
 		path,
 		//EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|EnvSyncDurable,
 		// EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|EnvSafeNoSync|EnvWriteMap,
-		EnvNoTLS|EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|EnvSafeNoSync|EnvWriteMap,
+		EnvNoTLS|EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|flags|EnvWriteMap,
 		0664,
 	)
-	env.SetMaxReaders(1)
-	if err != ErrSuccess {
-		return nil, err
-	}
 
 	if err = env.Begin(&engine.write, TxReadWrite); err != ErrSuccess {
 		return nil, err
@@ -192,8 +193,8 @@ func initDB(path string) (*Engine, Error) {
 }
 
 func BenchmarkTxn_Put(b *testing.B) {
-	defer os.RemoveAll("./testdata/db")
-	engine, err := initDB("./testdata/db/" + strconv.Itoa(b.N))
+	defer os.RemoveAll("testdata/db")
+	engine, err := initDB("testdata/db/"+strconv.Itoa(b.N), EnvSafeNoSync)
 	if err != ErrSuccess {
 		b.Fatal(err)
 	}
@@ -240,8 +241,8 @@ func BenchmarkTxn_Put(b *testing.B) {
 }
 
 func BenchmarkTxn_PutCursor(b *testing.B) {
-	defer os.RemoveAll("./testdata/db")
-	engine, err := initDB("./testdata/db/" + strconv.Itoa(b.N))
+	defer os.RemoveAll("testdata/db")
+	engine, err := initDB("testdata/db/"+strconv.Itoa(b.N), EnvSafeNoSync)
 	if err != ErrSuccess {
 		b.Fatal(err)
 	}
@@ -296,8 +297,8 @@ func BenchmarkTxn_PutCursor(b *testing.B) {
 }
 
 func BenchmarkTxn_Get(b *testing.B) {
-	defer os.RemoveAll("./testdata/db")
-	engine, err := initDB("./testdata/db/" + strconv.Itoa(b.N))
+	defer os.RemoveAll("testdata/db")
+	engine, err := initDB("testdata/db/"+strconv.Itoa(b.N), EnvSafeNoSync)
 	if err != ErrSuccess {
 		b.Fatal(err)
 	}
@@ -399,8 +400,8 @@ func BenchmarkTxn_Get(b *testing.B) {
 }
 
 func BenchmarkTxn_GetCursor(b *testing.B) {
-	defer os.RemoveAll("./testdata/db")
-	engine, err := initDB("./testdata/db/" + strconv.Itoa(b.N))
+	defer os.RemoveAll("testdata/db")
+	engine, err := initDB("testdata/db/"+strconv.Itoa(b.N), EnvSafeNoSync)
 	if err != ErrSuccess {
 		b.Fatal(err)
 	}
@@ -552,9 +553,9 @@ func BenchmarkTxn_GetCursor(b *testing.B) {
 }
 
 func TestTxn_Cursor(b *testing.T) {
-	defer os.RemoveAll("./testdata/db")
+	defer os.RemoveAll("testdata/db")
 	iterations := 100
-	engine, err := initDB("./testdata/db/" + strconv.Itoa(iterations))
+	engine, err := initDB("testdata/db/"+strconv.Itoa(iterations), EnvSafeNoSync)
 	if err != ErrSuccess {
 		b.Fatal(err)
 	}
@@ -663,4 +664,100 @@ func TestTxn_Cursor(b *testing.T) {
 
 	//engine.env.Sync(true, false)
 	//engine.env.Sync(true, false)
+}
+
+func BenchmarkWrite(b *testing.B) {
+	const runPebble = false
+	const all = 10000000000
+
+	runMDBXAppendBatched := func(batchSize int, name string, flags EnvFlags) {
+		batchSizeString := "ALL"
+		if batchSize < all {
+			batchSizeString = strconv.Itoa(batchSize)
+		}
+		b.Run("MDBX("+name+") Append "+batchSizeString, func(b *testing.B) {
+			defer func() {
+				if err := Delete("testdata/db", DeleteModeWaitForUnused); err != ErrSuccess {
+					b.Fatal(err)
+				}
+				defer os.RemoveAll("testdata/db")
+			}()
+			engine, err := initDB("testdata/db", flags)
+			if err != ErrSuccess {
+				b.Fatal(err)
+			}
+			key := uint64(0)
+			data := []byte("hello")
+			keyVal := U64(&key)
+			dataVal := Bytes(&data)
+			b.ReportAllocs()
+			b.ResetTimer()
+			{
+				insert := func(low, high uint64) {
+					txn, err := engine.BeginWrite()
+					if err != ErrSuccess {
+						b.Fatal(err)
+					}
+
+					cursor, err := txn.OpenCursor(engine.rootDB)
+					if err != ErrSuccess {
+						b.Fatal(err)
+					}
+
+					for i := low; i < high; i++ {
+						key = i
+						if err = cursor.Put(&keyVal, &dataVal, PutAppend); err != ErrSuccess {
+							cursor.Close()
+							txn.Abort()
+							b.Fatal(err)
+						}
+					}
+
+					if err = cursor.Close(); err != ErrSuccess {
+						b.Fatal(err)
+					}
+					if err = txn.Commit(); err != ErrSuccess {
+						b.Fatal(err)
+					}
+
+					//if flags != EnvSyncDurable {
+					//	if err = engine.env.Sync(false, false); err != ErrSuccess {
+					//		b.Fatal(err)
+					//	}
+					//}
+				}
+
+				for i := 0; i < b.N; i += batchSize {
+					end := i + batchSize
+					if end > b.N {
+						end = b.N
+					}
+					insert(uint64(i), uint64(end))
+				}
+
+				if flags != EnvSyncDurable {
+					if err = engine.env.Sync(true, false); err != ErrSuccess {
+						b.Fatal(err)
+					}
+				}
+			}
+			b.StopTimer()
+
+			if err = engine.env.Close(false); err != ErrSuccess {
+				b.Fatal(err)
+			}
+		})
+	}
+
+	runMDBXAppendBatched(all, "SyncDurable", EnvSyncDurable)
+	runMDBXAppendBatched(100000, "SyncDurable", EnvSyncDurable)
+	runMDBXAppendBatched(10000, "SyncDurable", EnvSyncDurable)
+	runMDBXAppendBatched(1000, "SyncDurable", EnvSyncDurable)
+	runMDBXAppendBatched(100, "SyncDurable", EnvSyncDurable)
+
+	runMDBXAppendBatched(all, "SafeNoSync", EnvSafeNoSync)
+	runMDBXAppendBatched(100000, "SafeNoSync", EnvSafeNoSync)
+	runMDBXAppendBatched(10000, "SafeNoSync", EnvSafeNoSync)
+	runMDBXAppendBatched(1000, "SafeNoSync", EnvSafeNoSync)
+	runMDBXAppendBatched(100, "SafeNoSync", EnvSafeNoSync)
 }

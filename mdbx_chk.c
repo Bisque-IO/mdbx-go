@@ -44,6 +44,7 @@
 #define MDBX_DEPRECATED
 #endif /* xMDBX_TOOLS */
 
+//#define xMDBX_ALLOY 1
 #ifdef xMDBX_ALLOY
 /* Amalgamated build */
 #define MDBX_INTERNAL_FUNC static

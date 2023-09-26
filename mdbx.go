@@ -1,8 +1,22 @@
 package mdbx
 
+import "C"
+import (
+	"os"
+	"reflect"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+	"unsafe"
+
+	"github.com/bisque-io/mdbx-go/internal/capture"
+	"github.com/bisque-io/mdbx-go/internal/unsafecgo"
+)
+
 /*
 //#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DMDBX_DEBUG=0 -DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1 -std=gnu11 -fvisibility=hidden -ffast-math  -fPIC -pthread -Wno-error=attributes -W -Wall -Werror -Wextra -Wpedantic -Wno-deprecated-declarations -Wno-format -Wno-implicit-fallthrough -Wno-unused-parameter -Wno-format-extra-args -Wno-missing-field-initializers
-#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
+#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
 #cgo linux LDFLAGS: -lrt
 
 // #define MDBX_ENABLE_MINCORE 1
@@ -10,12 +24,35 @@ package mdbx
 // #define MDBX_ENABLE_MADVISE 1
 // #define MDBX_ENABLE_PGOP_STAT 1
 // #define MDBX_TXN_CHECKOWNER 1
+//
+//enum MDBX_warmup_flags_t {
+//MDBX_warmup_default = 0,
+//
+//
+//MDBX_warmup_force = 1,
+//
+//
+//MDBX_warmup_oomsafe = 2,
+//
+//MDBX_warmup_lock = 4,
+//
+//MDBX_warmup_touchlimit = 8,
+//MDBX_warmup_release = 16,
+//};
+//
+//typedef enum MDBX_warmup_flags_t MDBX_warmup_flags_t;
+
+
 
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
 #include "mdbx.h"
 #include "mdbx_utils.h"
+
+//int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
+//                                enum MDBX_warmup_flags_t flags,
+//                                unsigned timeout_seconds_16dot16);
 
 #ifndef likely
 #   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
@@ -871,19 +908,20 @@ void do_mdbx_estimate_distance(size_t arg0, size_t arg1) {
 //	int32_t result;
 //} mdbx_estimate_move_t;
 
+//static int do_mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
+//                                int flags,
+//                                unsigned timeout_seconds_16dot16) {
+//	return mdbx_env_warmup(env, txn, flags, timeout_seconds_16dot16);
+//}
+
+#include <stdio.h>
+
+void do_mdbx_init() {
+	//printf("%d\n", mdbx_env_warmup);
+}
+
 */
 import "C"
-import (
-	"github.com/bisque-io/mdbx-go/internal/capture"
-	"os"
-	"reflect"
-	"sync"
-	"syscall"
-	"time"
-	"unsafe"
-
-	"github.com/bisque-io/mdbx-go/internal/unsafecgo"
-)
 
 const (
 	MaxDBI      = uint32(C.MDBX_MAX_DBI)
@@ -893,6 +931,7 @@ const (
 )
 
 func init() {
+	C.do_mdbx_init()
 	sz0 := unsafe.Sizeof(C.MDBX_envinfo{})
 	sz1 := unsafe.Sizeof(EnvInfo{})
 	if sz0 != sz1 {
@@ -1060,6 +1099,30 @@ func StatMain(args ...string) {
 }
 
 type LogLevel int32
+
+func (l LogLevel) String() string {
+	switch l {
+	case LogFatal:
+		return "FATAL"
+	case LogError:
+		return "ERROR"
+	case LogWarn:
+		return "WARN"
+	case LogNotice:
+		return "NOTICE"
+	case LogVerbose:
+		return "VERBOSE"
+	case LogDebug:
+		return "DEBUG"
+	case LogTrace:
+		return "TRACE"
+	case LogExtra:
+		return "EXTRA"
+	case LogDontChange:
+		return "DONTCHANGE"
+	}
+	return "UNKNOWN"
+}
 
 const (
 	// LogFatal Critical conditions, i.e. assertion failures
@@ -1254,6 +1317,88 @@ const (
 )
 
 type EnvFlags uint32
+
+func (e EnvFlags) Has(flag EnvFlags) bool {
+	return e&flag != 0
+}
+
+type flagStringBuilder struct {
+	s string
+	b strings.Builder
+}
+
+func (fb *flagStringBuilder) String() string {
+	return fb.b.String()
+}
+
+func (fb *flagStringBuilder) append(val string) *flagStringBuilder {
+	if len(fb.s) == 0 {
+		fb.s = val
+		return fb
+	}
+	if fb.b.Len() == 0 {
+		fb.b.WriteString(fb.s)
+	}
+	fb.b.WriteString(" | ")
+	fb.b.WriteString(val)
+	return fb
+}
+
+func (f EnvFlags) String() string {
+	if f == EnvEnvDefaults {
+		return "Defaults"
+	}
+	var b flagStringBuilder
+	if f.Has(EnvValidation) {
+		b.append("Validation")
+	}
+	if f.Has(EnvNoSubDir) {
+		b.append("NoSubDir")
+	}
+	if f.Has(EnvReadOnly) {
+		b.append("ReadOnly")
+	}
+	if f.Has(EnvExclusive) {
+		b.append("Exclusive")
+	}
+	if f.Has(EnvAccede) {
+		b.append("Accede")
+	}
+	if f.Has(EnvWriteMap) {
+		b.append("WriteMap")
+	}
+	if f.Has(EnvNoTLS) {
+		b.append("NoTLS")
+	}
+	if f.Has(EnvNoReadAhead) {
+		b.append("NoReadAhead")
+	}
+	if f.Has(EnvNoMemInit) {
+		b.append("NoMemInit")
+	}
+	if f.Has(EnvCoalesce) {
+		b.append("Coalesce")
+	}
+	if f.Has(EnvLIFOReclaim) {
+		b.append("LIFOReclaim")
+	}
+	if f.Has(EnvPagePerTurb) {
+		b.append("PagePerTurb")
+	}
+	if f.Has(EnvSyncDurable) {
+		b.append("SyncDurable")
+	}
+	if f.Has(EnvSafeNoSync) {
+		b.append("SafeNoSync")
+	}
+	if f.Has(EnvNoMetaSync) {
+		b.append("NoMetaSync")
+	}
+	if f.Has(EnvUtterlyNoSync) {
+		b.append("UtterlyNoSync")
+	}
+	return b.String()
+}
 
 const (
 	EnvEnvDefaults EnvFlags = 0
@@ -1649,6 +1794,51 @@ const (
 
 type TxFlags uint32
 
+func (f TxFlags) Has(flag TxFlags) bool {
+	return f&flag != 0
+}
+
+func (f TxFlags) String() string {
+	var b flagStringBuilder
+	if f.Has(TxReadWrite) {
+		b.append("ReadWrite")
+	}
+	if f.Has(TxReadOnly) {
+		b.append("ReadOnly")
+	}
+	if f.Has(TxReadOnlyPrepare) {
+		b.append("ReadOnlyPrepare")
+	}
+	if f.Has(TxTry) {
+		b.append("Try")
+	}
+	if f.Has(TxNoMetaSync) {
+		b.append("NoMetaSync")
+	}
+	if f.Has(TxNoSync) {
+		b.append("NoSync")
+	}
+	if f.Has(TxnInvalid) {
+		b.append("Invalid")
+	}
+	if f.Has(TxnFinished) {
+		b.append("Finished")
+	}
+	if f.Has(TxnDirty) {
+		b.append("Dirty")
+	}
+	if f.Has(TxnSpills) {
+		b.append("Spills")
+	}
+	if f.Has(TxnHasChild) {
+		b.append("HasChild")
+	}
+	if f.Has(TxnBlocked) {
+		b.append("Blocked")
+	}
+	return b.String()
+}
+
 const (
 	// TxReadWrite Start read-write transaction.
 	//
@@ -1722,6 +1912,42 @@ const (
 
 type DBFlags uint32
 
+func (f DBFlags) Has(flag DBFlags) bool {
+	return f&flag != 0
+}
+
+func (f DBFlags) String() string {
+	if f == DBDefaults {
+		return "Defaults"
+	}
+	var b flagStringBuilder
+	if f.Has(DBReverseKey) {
+		b.append("ReverseKey")
+	}
+	if f.Has(DBDupSort) {
+		b.append("DupSort")
+	}
+	if f.Has(DBIntegerKey) {
+		b.append("IntegerKey")
+	}
+	if f.Has(DBDupFixed) {
+		b.append("DupFixed")
+	}
+	if f.Has(DBIntegerGroup) {
+		b.append("IntegerGroup")
+	}
+	if f.Has(DBReverseDup) {
+		b.append("ReverseDup")
+	}
+	if f.Has(DBCreate) {
+		b.append("Create")
+	}
+	if f.Has(DBAccede) {
+		b.append("Accede")
+	}
+	return b.String()
+}
+
 const (
 	DBDefaults = DBFlags(C.MDBX_DB_DEFAULTS)
 
@@ -1764,6 +1990,42 @@ const (
 )
 
 type PutFlags uint32
+
+func (f PutFlags) Has(flag PutFlags) bool {
+	return f&flag != 0
+}
+
+func (f PutFlags) String() string {
+	var b flagStringBuilder
+	if f.Has(PutUpsert) {
+		b.append("Upsert")
+	}
+	if f.Has(PutNoOverwrite) {
+		b.append("NoOverwrite")
+	}
+	if f.Has(PutNoDupData) {
+		b.append("NoDupData")
+	}
+	if f.Has(PutCurrent) {
+		b.append("Current")
+	}
+	if f.Has(PutAllDups) {
+		b.append("AllDups")
+	}
+	if f.Has(PutReserve) {
+		b.append("Reserve")
+	}
+	if f.Has(PutAppend) {
+		b.append("Append")
+	}
+	if f.Has(PutAppendDup) {
+		b.append("AppendDup")
+	}
+	if f.Has(PutMultiple) {
+		b.append("Multiple")
+	}
+	return b.String()
+}
 
 const (
 	// PutUpsert Upsertion by default (without any other flags)
@@ -1808,6 +2070,24 @@ const (
 
 type CopyFlags uint32
 
+func (f CopyFlags) Has(flag CopyFlags) bool {
+	return f&flag != 0
+}
+
+func (f CopyFlags) String() string {
+	if f == CopyDefaults {
+		return "Defaults"
+	}
+	var b flagStringBuilder
+	if f.Has(CopyCompact) {
+		b.append("Compact")
+	}
+	if f.Has(CopyForceDynamicSize) {
+		b.append("ForceDynamicSize")
+	}
+	return b.String()
+}
+
 const (
 	CopyDefaults = CopyFlags(C.MDBX_CP_DEFAULTS)
 
@@ -1820,6 +2100,58 @@ const (
 )
 
 type CursorOp int32
+
+func (f CursorOp) Has(flag CursorOp) bool {
+	return f&flag != 0
+}
+
+func (f CursorOp) String() string {
+	switch f {
+	case CursorFirst:
+		return "First"
+	case CursorFirstDup:
+		return "FirstDup"
+	case CursorGetBoth:
+		return "GetBoth"
+	case CursorGetBothRange:
+		return "GetBothRange"
+	case CursorGetCurrent:
+		return "GetCurrent"
+	case CursorGetMultiple:
+		return "GetMultiple"
+	case CursorLast:
+		return "Last"
+	case CursorLastDup:
+		return "LastDup"
+	case CursorNext:
+		return "Next"
+	case CursorNextDup:
+		return "NextDup"
+	case CursorNextNoDup:
+		return "NextNoDup"
+	case CursorNextMultiple:
+		return "NextMultiple"
+	case CursorPrev:
+		return "Prev"
+	case CursorPrevDup:
+		return "PrevDup"
+	case CursorPrevNoDup:
+		return "PrevNoDup"
+	case CursorPrevMultiple:
+		return "PrevMultiple"
+	case CursorSet:
+		return "Set"
+	case CursorSetKey:
+		return "SetKey"
+	case CursorSetRange:
+		return "SetRange"
+	case CursorSetLowerBound:
+		return "SetLowerBound"
+	case CursorSetUpperBound:
+		return "SetUpperBound"
+	}
+	return "Unknown"
+}
 
 const (
 	// CursorFirst Position at first key/data item
@@ -1915,6 +2247,42 @@ const (
 )
 
 type Opt int32
+
+func (o Opt) String() string {
+	switch o {
+	case OptMaxDB:
+		return "MaxDB"
+	case OptMaxReaders:
+		return "MaxReaders"
+	case OptSyncBytes:
+		return "SyncBytes"
+	case OptSyncPeriod:
+		return "SyncPeriod"
+	case OptRpAugmentLimit:
+		return "RpAugmentLimit"
+	case OptLooseLimit:
+		return "LooseLimit"
+	case OptDpReserveLimit:
+		return "DpReserveLimit"
+	case OptTxnDpLimit:
+		return "TxnDpLimit"
+	case OptTxnDpInitial:
+		return "TxnDpInitial"
+	case OptSpillMaxDenomiator:
+		return "SpillMaxDenomiator"
+	case OptSpillMinDenomiator:
+		return "SpillMinDenomiator"
+	case OptSpillParent4ChildDenominator:
+		return "SpillParent4ChildDenominator"
+	case OptMergeThreshold16Dot16Percent:
+		return "MergeThreshold16Dot16Percent"
+	case OptWriteThroughThreshold:
+		return "WriteThroughThreshold"
+	case OptPreFaultWriteEnable:
+		return "PreFaultWriteEnable"
+	}
+	return "Unknown"
+}
 
 const (
 	// OptMaxDB \brief Controls the maximum number of named databases for the environment.
@@ -2084,9 +2452,54 @@ const (
 	// to 50% (half empty) which corresponds to the range from 8192 and to 32768
 	// in units respectively.
 	OptMergeThreshold16Dot16Percent = Opt(C.MDBX_opt_merge_threshold_16dot16_percent)
+
+	// \brief Controls the choosing between use write-through disk writes and
+	// usual ones with followed flush by the `fdatasync()` syscall.
+	// \details Depending on the operating system, storage subsystem
+	// characteristics and the use case, higher performance can be achieved by
+	// either using write-through or a serie of usual/lazy writes followed by
+	// the flush-to-disk.
+	//
+	// Basically for N chunks the latency/cost of write-through is:
+	//  latency = N // (emit + round-trip-to-storage + storage-execution);
+	// And for serie of lazy writes with flush is:
+	//  latency = N // (emit + storage-execution) + flush + round-trip-to-storage.
+	//
+	// So, for large N and/or noteable round-trip-to-storage the write+flush
+	// approach is win. But for small N and/or near-zero NVMe-like latency
+	// the write-through is better.
+	//
+	// To solve this issue libmdbx provide `MDBX_opt_writethrough_threshold`:
+	//  - when N described above less or equal specified threshold,
+	//    a write-through approach will be used;
+	//  - otherwise, when N great than specified threshold,
+	//    a write-and-flush approach will be used.
+	//
+	// \note MDBX_opt_writethrough_threshold affects only \ref MDBX_SYNC_DURABLE
+	// mode without \ref MDBX_WRITEMAP, and not supported on Windows.
+	// On Windows a write-through is used always but \ref MDBX_NOMETASYNC could
+	// be used for switching to write-and-flush.
+	OptWriteThroughThreshold = Opt(C.MDBX_opt_writethrough_threshold)
+
+	// \brief Controls prevention of page-faults of reclaimed and allocated pages
+	// in the \ref MDBX_WRITEMAP mode by clearing ones through file handle before
+	// touching
+	OptPreFaultWriteEnable = Opt(C.MDBX_opt_prefault_write_enable)
 )
 
 type DeleteMode int32
+
+func (d DeleteMode) String() string {
+	switch d {
+	case DeleteModeJustDelete:
+		return "JustDelete"
+	case DeleteModeEnsureUnused:
+		return "EnsureUnused"
+	case DeleteModeWaitForUnused:
+		return "WaitForUnused"
+	}
+	return "Unknown"
+}
 
 const (
 	// DeleteModeJustDelete \brief Just delete the environment's files and directory if any.
@@ -2107,9 +2520,23 @@ const (
 
 type DBIState uint32
 
+func (d DBIState) String() string {
+	switch d {
+	case DBIStateDirty:
+		return "Dirty"
+	case DBIStateStale:
+		return "Stale"
+	case DBIStateFresh:
+		return "Fresh"
+	case DBIStateCreat:
+		return "Create"
+	}
+	return "Unknown"
+}
+
 const (
 	DBIStateDirty = DBIState(C.MDBX_DBI_DIRTY) // DB was written in this txn
-	DBIStateState = DBIState(C.MDBX_DBI_STALE) // Named-DB record is older than txnID
+	DBIStateStale = DBIState(C.MDBX_DBI_STALE) // Named-DB record is older than txnID
 	DBIStateFresh = DBIState(C.MDBX_DBI_FRESH) // Named-DB handle opened in this txn
 	DBIStateCreat = DBIState(C.MDBX_DBI_CREAT) // Named-DB handle created in this txn
 )
@@ -2201,31 +2628,6 @@ func (env *Env) FD() (uintptr, error) {
 	}
 	return fd, nil
 }
-
-// ReaderList dumps the contents of the reader lock table as text.  Readers
-// start on the second line as space-delimited fields described by the first
-// line.
-//
-// See mdbx_reader_list.
-//func (env *Env) ReaderList(fn func(string) error) error {
-//	ctx, done := newMsgFunc(fn)
-//	defer done()
-//	if fn == nil {
-//		ctx = 0
-//	}
-//
-//	ret := C.mdbxgo_reader_list(env._env, C.size_t(ctx))
-//	if ret >= 0 {
-//		return nil
-//	}
-//	if ret < 0 && ctx != 0 {
-//		err := ctx.get().err
-//		if err != nil {
-//			return err
-//		}
-//	}
-//	return operrno("mdbx_reader_list", ret)
-//}
 
 // ReaderCheck clears stale entries from the reader lock table and returns the
 // number of entries cleared.
@@ -3356,6 +3758,211 @@ func (env *Env) GetMergeThreshold16Dot16Percent() (uint64, Error) {
 // in units respectively.
 func (env *Env) SetMergeThreshold16Dot16Percent(percent uint64) Error {
 	return env.SetOption(OptMergeThreshold16Dot16Percent, percent)
+}
+
+// \brief Controls the choosing between use write-through disk writes and
+// usual ones with followed flush by the `fdatasync()` syscall.
+// \details Depending on the operating system, storage subsystem
+// characteristics and the use case, higher performance can be achieved by
+// either using write-through or a serie of usual/lazy writes followed by
+// the flush-to-disk.
+//
+// Basically for N chunks the latency/cost of write-through is:
+//
+//	latency = N // (emit + round-trip-to-storage + storage-execution);
+//
+// And for serie of lazy writes with flush is:
+//
+//	latency = N // (emit + storage-execution) + flush + round-trip-to-storage.
+//
+// So, for large N and/or noteable round-trip-to-storage the write+flush
+// approach is win. But for small N and/or near-zero NVMe-like latency
+// the write-through is better.
+//
+// To solve this issue libmdbx provide `MDBX_opt_writethrough_threshold`:
+//   - when N described above less or equal specified threshold,
+//     a write-through approach will be used;
+//   - otherwise, when N great than specified threshold,
+//     a write-and-flush approach will be used.
+//
+// \note MDBX_opt_writethrough_threshold affects only \ref MDBX_SYNC_DURABLE
+// mode without \ref MDBX_WRITEMAP, and not supported on Windows.
+// On Windows a write-through is used always but \ref MDBX_NOMETASYNC could
+// be used for switching to write-and-flush.
+func (env *Env) GetOptWriteThroughThreshold() (uint64, Error) {
+	return env.GetOption(OptWriteThroughThreshold)
+}
+
+// \brief Controls the choosing between use write-through disk writes and
+// usual ones with followed flush by the `fdatasync()` syscall.
+// \details Depending on the operating system, storage subsystem
+// characteristics and the use case, higher performance can be achieved by
+// either using write-through or a serie of usual/lazy writes followed by
+// the flush-to-disk.
+//
+// Basically for N chunks the latency/cost of write-through is:
+//
+//	latency = N // (emit + round-trip-to-storage + storage-execution);
+//
+// And for serie of lazy writes with flush is:
+//
+//	latency = N // (emit + storage-execution) + flush + round-trip-to-storage.
+//
+// So, for large N and/or noteable round-trip-to-storage the write+flush
+// approach is win. But for small N and/or near-zero NVMe-like latency
+// the write-through is better.
+//
+// To solve this issue libmdbx provide `MDBX_opt_writethrough_threshold`:
+//   - when N described above less or equal specified threshold,
+//     a write-through approach will be used;
+//   - otherwise, when N great than specified threshold,
+//     a write-and-flush approach will be used.
+//
+// \note MDBX_opt_writethrough_threshold affects only \ref MDBX_SYNC_DURABLE
+// mode without \ref MDBX_WRITEMAP, and not supported on Windows.
+// On Windows a write-through is used always but \ref MDBX_NOMETASYNC could
+// be used for switching to write-and-flush.
+func (env *Env) SetOptWriteThroughThreshold(threshold uint64) Error {
+	return env.SetOption(OptWriteThroughThreshold, threshold)
+}
+
+// \brief Controls prevention of page-faults of reclaimed and allocated pages
+// in the \ref MDBX_WRITEMAP mode by clearing ones through file handle before
+// touching
+func (env *Env) IsOptPreFaultWriteEnabled() (bool, Error) {
+	r, err := env.GetOption(OptPreFaultWriteEnable)
+	return r != 0, err
+}
+
+// \brief Controls prevention of page-faults of reclaimed and allocated pages
+// in the \ref MDBX_WRITEMAP mode by clearing ones through file handle before
+// touching
+func (env *Env) SetOptPreFaultWriteEnable(enabled bool) Error {
+	var arg uint64 = 0
+	if enabled {
+		arg = 1
+	}
+	return env.SetOption(OptPreFaultWriteEnable, arg)
+}
+
+type WarmupFlags int32
+
+func (w WarmupFlags) Has(flag WarmupFlags) bool {
+	return w&flag != 0
+}
+
+func (w WarmupFlags) String() string {
+	if w == WarmupDefault {
+		return "Default"
+	}
+	var b flagStringBuilder
+	if w.Has(WarmupForce) {
+		b.append("Force")
+	}
+	if w.Has(WarmupOOMSafe) {
+		b.append("OOMSafe")
+	}
+	if w.Has(WarmupLock) {
+		b.append("Lock")
+	}
+	if w.Has(WarmupTouchLimit) {
+		b.append("TouchLimit")
+	}
+	if w.Has(WarmupRelease) {
+		b.append("Release")
+	}
+	return b.String()
+}
+
+const (
+	// By default \ref mdbx_env_warmup() just ask OS kernel to asynchronously
+	// prefetch database pages.
+	WarmupDefault = WarmupFlags(0)
+
+	// Peeking all pages of allocated portion of the database
+	// to force ones to be loaded into memory. However, the pages are just peeks
+	// sequentially, so unused pages that are in GC will be loaded in the same
+	// way as those that contain payload.
+	WarmupForce = WarmupFlags(1)
+
+	// Using system calls to peeks pages instead of directly accessing ones,
+	// which at the cost of additional overhead avoids killing the current
+	// process by OOM-killer in a lack of memory condition.
+	// \note Has effect only on POSIX (non-Windows) systems with conjunction
+	// to \ref MDBX_warmup_force option.
+	WarmupOOMSafe = WarmupFlags(2)
+
+	// Try to lock database pages in memory by `mlock()` on POSIX-systems
+	// or `VirtualLock()` on Windows. Please refer to description of these
+	// functions for reasonability of such locking and the information of
+	// effects, including the system as a whole.
+	//
+	// Such locking in memory requires that the corresponding resource limits
+	// (e.g. `RLIMIT_RSS`, `RLIMIT_MEMLOCK` or process working set size)
+	// and the availability of system RAM are sufficiently high.
+	//
+	// On successful, all currently allocated pages, both unused in GC and
+	// containing payload, will be locked in memory until the environment closes,
+	// or explicitly unblocked by using \ref MDBX_warmup_release, or the
+	// database geomenry will changed, including its auto-shrinking. */
+	WarmupLock = WarmupFlags(4)
+
+	// Alters corresponding current resource limits to be enough for lock pages
+	// by \ref MDBX_warmup_lock. However, this option should be used in simpler
+	// applications since takes into account only current size of this environment
+	// disregarding all other factors. For real-world database application you
+	// will need full-fledged management of resources and their limits with
+	// respective engineering.
+	WarmupTouchLimit = WarmupFlags(8)
+
+	// Release the lock that was performed before by \ref MDBX_warmup_lock.
+	WarmupRelease = WarmupFlags(16)
+)
+
+// \brief Warms up the database by loading pages into memory, optionally lock
+// ones. \ingroup c_settings
+//
+// Depending on the specified flags, notifies OS kernel about following access,
+// force loads the database pages, including locks ones in memory or releases
+// such a lock. However, the function does not analyze the b-tree nor the GC.
+// Therefore an unused pages that are in GC handled (i.e. will be loaded) in
+// the same way as those that contain payload.
+//
+// At least one of `env` or `txn` argument must be non-null.
+//
+// \param [in] env              An environment handle returned
+//
+//	by \ref mdbx_env_create().
+//
+// \param [in] txn              A transaction handle returned
+//
+//	by \ref mdbx_txn_begin().
+//
+// \param [in] flags            The \ref warmup_flags, bitwise OR'ed together.
+//
+// \param [in] timeout_seconds_16dot16  Optional timeout which checking only
+//
+//	during explicitly peeking database pages
+//	for loading ones if the \ref MDBX_warmup_force
+//	option was specified.
+//
+// \returns A non-zero error value on failure and 0 on success.
+// Some possible errors are:
+//
+// \retval MDBX_ENOSYS        The system does not support requested
+// operation(s).
+//
+// \retval MDBX_RESULT_TRUE   The specified timeout is reached during load
+//
+//	data into memory.
+func (env *Env) Warmup(tx *Tx, flags WarmupFlags, timeoutSeconds16dot16 uint32) Error {
+	return Error(
+		C.mdbx_env_warmup(
+			env.env,
+			tx.txn,
+			C.MDBX_warmup_flags_t(flags),
+			C.unsigned(timeoutSeconds16dot16),
+		))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////

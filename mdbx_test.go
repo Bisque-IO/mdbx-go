@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"testing"
 	"unsafe"
@@ -80,6 +81,10 @@ func TestEnv_Open(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err = env.Warmup(&txn, WarmupOOMSafe, 0); err != ErrSuccess {
+		t.Fatal(err)
+	}
+
 	var dbi DBI
 	if dbi, err = txn.OpenDBI("m", DBIntegerKey|DBCreate); err != ErrSuccess {
 		t.Fatal(err)
@@ -101,7 +106,8 @@ func TestEnv_Open(t *testing.T) {
 	if err != ErrSuccess {
 		t.Fatal(err)
 	}
-	fmt.Println(info)
+	_ = info
+	//fmt.Println(info)
 
 	// var latency CommitLatency
 	if err = txn.Commit(); err != ErrSuccess {
@@ -671,6 +677,8 @@ func BenchmarkWrite(b *testing.B) {
 	const all = 10000000000
 
 	runMDBXAppendBatched := func(batchSize int, name string, flags EnvFlags) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
 		batchSizeString := "ALL"
 		if batchSize < all {
 			batchSizeString = strconv.Itoa(batchSize)

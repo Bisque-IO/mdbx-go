@@ -14,27 +14,26 @@ Stabilizing release with correction of identified errors and shortcomings on the
 
 Corrections and refinements:
 
-- Fixing a misprint in the variable's name inside`mdbx_env_turn_for_recovery()`which led to misbehaviour in certain situations. From a users point of view, given the current Utilities scenarios`mdbx_chk`there was only one specific/received error/issue scenario - when the weak/weak meta page was checked and activated with НЕ-последней transactions after the car's system crash where the OBD was used in fragile/unsafe mode. In the scenario, when the target page was successfully checked and activated, an error was reported relating to the non-coherence control mechanism of the file system and the OBD data displayed in the DOS. The OBD was successfully restored and there were no negative consequences except the error report itself. Technically, the error occurred when the metapage was "shifted" when one of the other two metapages had a larger transaction number:
+- Fixing a misprint in the variable's name inside `mdbx_env_turn_for_recovery()` which led to misbehaviour in certain situations. From a users point of view, given the current Utilities scenarios `mdbx_chk` there was only one specific/received error/issue scenario - when the weak/weak meta page was checked and activated with НЕ-последней transactions after the car's system crash where the OBD was used in fragile/unsafe mode. In the scenario, when the target page was successfully checked and activated, an error was reported relating to the non-coherence control mechanism of the file system and the OBD data displayed in the DOS. The OBD was successfully restored and there were no negative consequences except the error report itself. Technically, the error occurred when the metapage was "shifted" when one of the other two metapages had a larger transaction number:
 - While the content of other meta-pages was correct and the transaction numbers were larger, the resulting transaction number in the target/activated meta-page was not appropriate to these meta-pages and could be less or equal.
 - As a result, if such meta-pages were weak/weak status, the anti-coherence protection unified buffer/page cache could be activated when the OBD was closed after switching, and an assert check could be activated in debugging assemblies.
 - If such meta-pages were strong/style, the switch to a new meta-page might not have had an effect or resulted in two meta-pages with the same transaction number, which is a wrong situation.
-- Overriding assembly problems through GCC using options`-m32 -arch=i686 -Ofast`.The problem is caused by the GCC error that caused the design`__attribute__((__target__("sse2")))`does not include full use of the SSE and SSE2 instructions unless this was done by command line options, but the option was used`-Ofast`.As a result, the assembly ended with an error report:`error: inlining failed in call to 'always_inline' '_mm_movemask_ps': target specific option mismatch`
+- Overriding assembly problems through GCC using options `-m32 -arch=i686 -Ofast`.The problem is caused by the GCC error that caused the design `__attribute__((__target__("sse2")))` does not include full use of the SSE and SSE2 instructions unless this was done by command line options, but the option was used `-Ofast`.As a result, the assembly ended with an error report:`error: inlining failed in call to 'always_inline' '_mm_movemask_ps': target specific option mismatch`
 - Finalization of the OBD "rehabilitation" mode and switching to the specified meta-page:
    - Elimination of the update without the need for a meta-page with an increase in transaction number;
    - Removal of a pointless/excessive warning from the OBD geometry update;
    - More expected and safe behaviour when checking OBD with target meta-page in reading-record mode.
-
-- Now when the OBD is opened by`mdbx_env_open_for_recovery()`The OBD shall not be tampered with, including when the OBD is closed. This shall make it possible to secure the OBD (destroy the probability of its destruction) if the user, in an attempt to recover, or simply as an experiment, has delivered a disposal device.`mdbx_chk`A combination of incorrect or dangerous parameters is still in operation, and the normal verification, like the explicit switching of meta-pages, is still in operation.
+- Now when the OBD is opened by `mdbx_env_open_for_recovery()` The OBD shall not be tampered with, including when the OBD is closed. This shall make it possible to secure the OBD (destroy the probability of its destruction) if the user, in an attempt to recover, or simply as an experiment, has delivered a disposal device. `mdbx_chk` A combination of incorrect or dangerous parameters is still in operation, and the normal verification, like the explicit switching of meta-pages, is still in operation.
 
 Little things:
 
-- Minor specification CMake-пробника for`std::filesystem`, checking the need for a lincoque with additional libraries C++.
+- Minor specification CMake-пробника for `std::filesystem`, checking the need for a lincoque with additional libraries C++.
 - Elimination of minor warnings from old compilers in tests.
 - Addressing the cause of false-positive warnings of new versions of GCC in C++API.
 - Correction of the link to the benchmarking repository of the ioarena.
 - Add cross-references to the doxygen documentation for C++ API.
 - Clarification of restrictions in section[Restructions &amp; Caveats](https://libmdbx.dqdkfa.ru/intro.html#restrictions "").
-- Correction of references to description`mdbx_canary_put()`.
+- Correction of references to description `mdbx_canary_put()`.
 
 ------------------------------------------------------------------------------------------------------------------------------
 
@@ -50,7 +49,7 @@ Little things:
 
 - Update the patch for old version of the bildroot.
 - Use of clang-format-16.
-- Use`enum`- Types instead of`int`to eliminate GCC 13 warnings, which could break the assembly in Fedora 38.
+- Use `enum` - Types instead of `int` to eliminate GCC 13 warnings, which could break the assembly in Fedora 38.
 
 ------------------------------------------------------------------------------------------------------------------------------
 
@@ -61,25 +60,26 @@ Stabilizing issue with correction of identified errors and shortcomings, 100-yea
     16 files changed, 686 insertions(+), 247 deletions(-)
     Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
     </leo@yuriev.ru>
+
 Thanks:
 
 - Max[maxc0d3r@protonmail.com](mailto:maxc0d3r@protonmail.com "")For reporting on the issue of exports from DSO/DLL obsolete functions API.
-- `@calvin3721`for reporting on work-related issues `MainDB`With flags, it's not quiet.
+- `@calvin3721` for reporting on work-related issues `MainDB` With flags, it's not quiet.
 
 Corrections:
 
 - Export from DSO/DLL is corrected for obsolete functions that are replaced online in the current API.
-- The use of an incorrect comparator in the creation or re-establishment has been eliminated`MainDB`with flags/opposions involving a specific comparator (not silent).
+- The use of an incorrect comparator in the creation or re-establishment has been eliminated `MainDB` with flags/opposions involving a specific comparator (not silent).
 
 Little things:
 
-- Duplicate diagnostics inside removed`node_read_bigdata()`.
-- References in the description corrected`mdbx_env_set_geometry()`.
-- A separate test added`extra/upsert_alldups`For a specific replacement/rewrite scenario, a single value of all multi-purposes of the relevant key, i.e., the replacement of all "duplicates" with one value.
-- Options added to C++ API`buffer::key_from()`with a clear name by type of data.
-- A separate test added`extra/maindb_ordinal`for a specific creation scenario`MainDB`with flags requiring the use of a comparator in a non-silence manner.
+- Duplicate diagnostics inside removed `node_read_bigdata()`.
+- References in the description corrected `mdbx_env_set_geometry()`.
+- A separate test added `extra/upsert_alldups` For a specific replacement/rewrite scenario, a single value of all multi-purposes of the relevant key, i.e., the replacement of all "duplicates" with one value.
+- Options added to C++ API `buffer::key_from()` with a clear name by type of data.
+- A separate test added `extra/maindb_ordinal` for a specific creation scenario `MainDB` with flags requiring the use of a comparator in a non-silence manner.
 - Reactoring the "coherence" test of meta pages.
-- Adjustment`osal_vasprintf()`to eliminate static analyzer warnings.
+- Adjustment `osal_vasprintf()` to eliminate static analyzer warnings.
 
 ------------------------------------------------------------------------------------------------------------------------------
 
@@ -101,27 +101,27 @@ Corrections:
 
 - The regression following the 474391c83c5f81def6fdf3b0b6f5716a87b78bfff has been eliminated, resulting in the return of ERROR_SARING_VIOLATION to Windows when the OBD is opened in the MDBX_EXLUSIVE mode for reading-recording.
 - Added a display size limit at a short read-only file to prevent error ERROR_NOT_ENOUGH_MEMORY in Windows, which is then not informative at all for the user.
-- Reactorization conducted`dxb_resize()`including, to eliminate the response of the ASERT check`size_bytes == env-&gt;me_dxb_mmap.current`The check only worked in debugging assemblies, with specific reading and writing transactions in different streams, at the same time as the OBD size was changed. In addition to operating the check, there were no other consequences.
-- The problem with`put(MDBX_UPSERT+MDBX_ALLDUPS)`In this operation, subDb becomes completely empty, without any pages, and this is the situation that has not been included in the code, which has resulted in OBD damage when the transaction is fixed.
-- Over-assert check inside removed`override_meta()`.Which in debugging assemblies could lead to false responses to OBD recovery, including automatic rebound of weak meta-pages.
-- Macroeconomics adjusted`__cold`/`__hot`including to address the problem`error: inlining failed in call to ‘always_inline FOO(...)’: target specific option mismatch`when assembled using GCC &gt;10.x for SH4.
+- Reactorization conducted `dxb_resize()` including, to eliminate the response of the ASERT check `size_bytes == env-&gt;me_dxb_mmap.current` The check only worked in debugging assemblies, with specific reading and writing transactions in different streams, at the same time as the OBD size was changed. In addition to operating the check, there were no other consequences.
+- The problem with`put(MDBX_UPSERT+MDBX_ALLDUPS)` In this operation, subDb becomes completely empty, without any pages, and this is the situation that has not been included in the code, which has resulted in OBD damage when the transaction is fixed.
+- Over-assert check inside removed `override_meta()`.Which in debugging assemblies could lead to false responses to OBD recovery, including automatic rebound of weak meta-pages.
+- Macroeconomics adjusted `__cold` / `__hot` including to address the problem `error: inlining failed in call to ‘always_inline FOO(...)’: target specific option mismatch` when assembled using GCC &gt;10.x for SH4.
 
 
 Elimination of technical debts and minorities:
 
 - Numerous errors in the documentation have been corrected.
-- Completed test for full stochastic testing`MDBX_EKEYMISMATCH`in mode`MDBX_APPEND`.
-- Launch scenarios expanded`mdbx_chk`CMake-тестов for verification in both normal and exclusive reading and recording modes.
-- Refined Specification`const`and`noexcept`For several methods in C++ API.
-- The use of the drain under the buffers has been eliminated`wchar`- route transformation.
-- For Windows, a function added`mdbx_env_get_path()`to obtain a path to the OBD in multibyte character format.
+- Completed test for full stochastic testing `MDBX_EKEYMISMATCH` in mode `MDBX_APPEND`.
+- Launch scenarios expanded `mdbx_chk` CMake-тестов for verification in both normal and exclusive reading and recording modes.
+- Refined Specification `const` and `noexcept` For several methods in C++ API.
+- The use of the drain under the buffers has been eliminated `wchar` - route transformation.
+- For Windows, a function added `mdbx_env_get_path()` to obtain a path to the OBD in multibyte character format.
 - Added doxygen descriptions for API with broad symbols.
 - The MSVC static analyzer warnings have been removed, all of which were irrelevant or false.
 - The false GCC warning for SH4 was removed.
 - The ASAN (Address Sanitizer) support for the MSVC assembly has been added.
-- Script resample set expanded`test/long_stochastic.sh`the option added`--extra`.
-- C++ API Added support for extended implementation time options`mdbx::extra_runtime_option`similar`enum MDBX_option_t`C API.
-- Discharge of all page-operations counters`mdbx_stat`.
+- Script resample set expanded `test/long_stochastic.sh` the option added `--extra`.
+- C++ API Added support for extended implementation time options `mdbx::extra_runtime_option` similar `enum MDBX_option_t` C API.
+- Discharge of all page-operations counters `mdbx_stat`.
 
 ------------------------------------------------------------------------------------------------------------------------------
 
@@ -134,6 +134,7 @@ Added prefault recording, reset control of uncoherence. unified page/buffer cach
     20 files changed, 4508 insertions(+), 2928 deletions(-)
     Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
     </leo@yuriev.ru>
+
 Thanks:
 
 - [Alex Sharov](https://t.me/AskAlexSharov "")and team[Erigon](https://github.com/ledgerwatch/erigon "")for testing.
@@ -145,21 +146,21 @@ New:
 
 - Prefault recording for read-write display pages has been implemented. This results in multiple reductions in system costs and significant productivity gains in the respective use scenarios when:
    - The size of the OBD and data volume is significantly higher than the LSA;
-   - mode used`MDBX_WRITEMAP`;
+   - mode used `MDBX_WRITEMAP`;
    - Non-small transactions (in progress, many hundreds or thousands of pages are identified).
-- In mode`MDBX_WRITEMAP`The selection/re-use of pages results in page-fault and reading from the disk, even if the content of the page is not necessary (to be rewritten). This is the result of the virtual memory subsystem and the regular mode of treatment through`MADV_REMOVE`It does not work for all FSs and is usually more expensive than savings.
+- In mode `MDBX_WRITEMAP` The selection/re-use of pages results in page-fault and reading from the disk, even if the content of the page is not necessary (to be rewritten). This is the result of the virtual memory subsystem and the regular mode of treatment through `MADV_REMOVE` It does not work for all FSs and is usually more expensive than savings.
    - Now libmdbx uses a "precautionary entry" of pages that are on systems with[Unified page cache](https://www.opennet.ru/base/dev/ubc.txt.html "")results in data "pulling" by eliminating the need to read from the disk when accessing such a memory page.
    - The new functionality works in harmony with automatic read-ahed control and cache of the presence status of pages in the OZM, through[mincore()](https://man7.org/linux/man-pages/man2/mincore.2.html "").
-- An option added`MDBX_opt_prefault_write_enable`For the possibility of mandatory inclusion/deactivation of prefault recording.
-- Dynamic choice made between the disk and the regular recording followed by[fdatasync()](https://man7.org/linux/man-pages/man3/fdatasync.3p.html "")managed by an option`MDBX_opt_writethrough_threshold`. In long-term (durable) modes, data can be released on a disc in two ways:
-   - Through the file descriptor open with`O_DSYNC`;
-   - normal recording followed by call`fdatasync()`.
-- The first option is better for writing down a small number of pages and/or if the channel with the disc/host has close to zero delay. The second option is better if many pages are required and/or the channel has a significant delay (date centres, clouds).`MDBX_opt_writethrough_threshold`Allows a threshold to be set at the time of execution for the dynamic choice of the mode of recording, depending on the volume and the specific conditions of use.
-- Automatic installation`MDBX_opt_rp_augment_limit`Depending on the size of the OBD.
-- Prohibition of different treatment`MDBX_WRITEMAP`between processes in deferred/lazy recording modes, because in this case it is not possible to release data on a disc in all cases on all supported platforms.
-- Assembly option added`MDBX_MMAP_USE_MS_ASYNC`Disabled system call`msync(MS_ASYNC)`which is not necessary on the vast majority of relevant LOs.`MDBX_MMAP_USE_MS_ASYNC=0`(deleted) on Linux and other systems with unified page cache.`msync(MS_ASYNC)`) corresponds to the unaltered logic of LMDB. As a result, in simple/naive-based benchmarking, libmdbx exceeds LMDB approximately as much as in real use. Just in case, it should be noted/remember that on Windows, it is assumed that libmdbx will lag behind LMDB in multiple small transaction scenarios, because libmdbx knowingly uses file locks on Windows that are slow (badly implemented in the OS core) but allow users to be insured against a mass of incorrect actions causing OBD damage.
+- An option added `MDBX_opt_prefault_write_enable` For the possibility of mandatory inclusion/deactivation of prefault recording.
+- Dynamic choice made between the disk and the regular recording followed by[fdatasync()](https://man7.org/linux/man-pages/man3/fdatasync.3p.html "")managed by an option `MDBX_opt_writethrough_threshold`. In long-term (durable) modes, data can be released on a disc in two ways:
+   - Through the file descriptor open with `O_DSYNC`;
+   - normal recording followed by call `fdatasync()`.
+- The first option is better for writing down a small number of pages and/or if the channel with the disc/host has close to zero delay. The second option is better if many pages are required and/or the channel has a significant delay (date centres, clouds). `MDBX_opt_writethrough_threshold` Allows a threshold to be set at the time of execution for the dynamic choice of the mode of recording, depending on the volume and the specific conditions of use.
+- Automatic installation `MDBX_opt_rp_augment_limit` Depending on the size of the OBD.
+- Prohibition of different treatment `MDBX_WRITEMAP` between processes in deferred/lazy recording modes, because in this case it is not possible to release data on a disc in all cases on all supported platforms.
+- Assembly option added `MDBX_MMAP_USE_MS_ASYNC` Disabled system call `msync(MS_ASYNC)`which is not necessary on the vast majority of relevant LOs. `MDBX_MMAP_USE_MS_ASYNC=0`(deleted) on Linux and other systems with unified page cache. `msync(MS_ASYNC)`) corresponds to the unaltered logic of LMDB. As a result, in simple/naive-based benchmarking, libmdbx exceeds LMDB approximately as much as in real use. Just in case, it should be noted/remember that on Windows, it is assumed that libmdbx will lag behind LMDB in multiple small transaction scenarios, because libmdbx knowingly uses file locks on Windows that are slow (badly implemented in the OS core) but allow users to be insured against a mass of incorrect actions causing OBD damage.
 - Support for non-print names for subDb.
-- A clear choice added`tls_model("local-dynamic")`to avoid the problem.`relocation R_X86_64_TPOFF32 against FOO cannot be used with -shared`due to an error in the CLANG leading to the use of an incorrect mode`ls_model`.
+- A clear choice added `tls_model("local-dynamic")` to avoid the problem. `relocation R_X86_64_TPOFF32 against FOO cannot be used with -shared`due to an error in the CLANG leading to the use of an incorrect mode `ls_model`.
 - Change in the method of merging pages at removal. The merger is now performed mainly with the already modified/filtered page. If both pages on the right and on the left are of the same status, then the least completed page is the same as before. In mass disposal scenarios, this increases productivity to 50 per cent.
 - Added LCK-file absence check with alternative name.
 
@@ -168,11 +169,11 @@ Corrections (without adjustment of new functions):
 - Change of display size if required to release data on disk when called`mdbx_env_sync()`from a parallel flow of performance outside the operating transaction.
 - Correction of the regression after the comedine db72763de049d6e4546f838277fe83b9081ad1de of 2022-10-08 in the logic of returning dirty pages in mode`MDBX_WRITEMAP`that led to the use of the free pages not immediately, but rather to a retried transaction list and an unjustified increase in transaction size.
 
-- Removal of SIGSGV or erroneous call`free()`in situations of re-opening by`mdbx_env_open()`.
-- Remedial of an error made in the comms fe20de136c22ed3bc4c6d3f673e79c106e824f60 of 2022-09-18, resulting in Linux mode`MDBX_WRITEMAP`Never called.`msync()`.The problem exists only in release 0.12.2.
-- Adding dirty pages to`MDBX_WRITEMAP`to be made available by`mdbx_txn_info()`up-to-date information on the extent of changes in reading-recording transactions.
-- Correction of non-existent typo under`#if`The order of byte.
-- Correction of assembly for incident`MDBX_PNL_ASCENDING=1`.
+- Removal of SIGSGV or erroneous call `free()` in situations of re-opening by `mdbx_env_open()`.
+- Remedial of an error made in the comms fe20de136c22ed3bc4c6d3f673e79c106e824f60 of 2022-09-18, resulting in Linux mode `MDBX_WRITEMAP` Never called. `msync()`. The problem exists only in release 0.12.2.
+- Adding dirty pages to `MDBX_WRITEMAP` to be made available by `mdbx_txn_info()` up-to-date information on the extent of changes in reading-recording transactions.
+- Correction of non-existent typo under `#if` The order of byte.
+- Correction of assembly for incident `MDBX_PNL_ASCENDING=1`.
 
 
 Elimination of technical debts and minorities:
@@ -182,9 +183,9 @@ Elimination of technical debts and minorities:
 - Use of a single locator to search GC.
 - Reprocessing of internal flags related to GC pages.
 - Finalize the preparation of the reserve before updating GC with BigFoot included.
-- Optimization`pnl_merge()`For non-overlapping combined lists.
-- Optimizing support to the graded page list`dpl_append()`.
-- Accelerating work`mdbx_chk`when processing user records in`@MAIN`.
+- Optimization `pnl_merge()` For non-overlapping combined lists.
+- Optimizing support to the graded page list `dpl_append()`.
+- Accelerating work `mdbx_chk` when processing user records in `@MAIN`.
 - Reprocessing LRU spilling tags.
 - Re-engineering of the control of "uncoherence" Unified page cache to reduce overhead costs.
 - Reactorization and microoptimization.
@@ -206,57 +207,57 @@ New:
 - Support all major assembly options through CMake.
 - Requirements for CMake are lowered to version 3.0.2 to allow assembly for obsolete platforms.
 - The possibility of profiling GC work in complex and/or loaded scenarios (e.g. Ethereum/Erigon) has been added. The code has been shut down and the assembly option needs to be specified for activation.`MDBX_ENABLE_PROFGC=1`.
-- Added Function`mdbx_env_warmup()`for OBD "heating" with the possibility of keeping the pages in memory.`mdbx_chk`, `mdbx_copy`and`mdbx_dump`Options added`-u`and`-U`to activate the relevant functional unit.
-- Disabled treatment of "foul" pages in non-negative modes (in thousands of United States dollars)`MDBX_WRITEMAP`to`MDBX_AVOID_MSYNC=0`Further development has reduced overhead costs and has been planned for a long time, but has been postponed as it has required other changes.
+- Added Function `mdbx_env_warmup()` for OBD "heating" with the possibility of keeping the pages in memory.`mdbx_chk`, `mdbx_copy` and `mdbx_dump` Options added `-u` and `-U` to activate the relevant functional unit.
+- Disabled treatment of "foul" pages in non-negative modes (in thousands of United States dollars) `MDBX_WRITEMAP` to `MDBX_AVOID_MSYNC=0` Further development has reduced overhead costs and has been planned for a long time, but has been postponed as it has required other changes.
 
-- Removing (spilling) dirty pages with large/overflow pages. Finalization allows correct compliance with options policy`MDBX_opt_txn_dp_limit`,
+- Removing (spilling) dirty pages with large/overflow pages. Finalization allows correct compliance with options policy `MDBX_opt_txn_dp_limit`,
   `MDBX_opt_spill_max_denominator`, `MDBX_opt_spill_min_denominator`and was planned long ago, but delayed as it required other changes.
-- For Windows, UNICODE definitions of macros added in API`MDBX_DATANAME`, `MDBX_LOCKNAME`and`MDBX_LOCK_SUFFIX`.
-- Switch to type-use priority`size_t`In order to reduce overhead costs on the Elbrus platform.
-- Functions added to API`mdbx_limits_valsize4page_max()`and`mdbx_env_get_valsize4page_max()`Returning the maximum size in bytes, which may be placed in the same large/overflow page, rather than in sequences of two or more such pages. For tables supporting duplicates, taking out values on the large/overflow page is not supported, so the result is consistent with`mdbx_limits_valsize_max()`.
-- Functions added to API`mdbx_limits_pairsize4page_max()`and`mdbx_env_get_pairsize4page_max()`Returning the maximum total size of the pair of key-values in bytes to be placed on the same page, without removing the value to a separate large/overflow page. For tables supporting duplicates, the large/overflow page is not supported, so the result determines the maximum/acceptable total size of the key-value pair.
-- Use of asynchronous (overlapped) Windows entry, including non-bufied input and output`WriteGather()`.This reduces overhead costs and partially circumvents Windows problems with low input-output productivity, including high delays`FlushFileBuffers()`.The new code also consolidates the recorded regions on all platforms, while on Windows, the use of events (events) is reduced to a minimum while automatically using`WriteGather()`.Therefore, there is a significant reduction in overhead costs for OS, and in Windows this acceleration, in some scenarios, may be multiple compared to LMDB.
-- Assembly option added`MDBX_AVOID_MSYNC`which determines the behavior of libmdbx in mode`MDBX_WRITE_MAP`(when data are modified directly on the OBD pages displayed in the OSL):
-   - If`MDBX_AVOID_MSYNC=0`(by default for all systems except Windows), (as in the past) saves data by`msync()`either`FlushViewOfFile()`On Windows platforms with a full virtual memory subsystem and an adequate file output input, this provides a minimum overhead (one system challenge) and maximum productivity. However, Windows is causing significant degradation, including because of post-system-based data-processing problems.`FlushViewOfFile()`Also required to challenge`FlushFileBuffers()`With a mass of problems and fuss inside the OS core.
-   - If`MDBX_AVOID_MSYNC=1`(by default only on Windows), data retention is performed by an explicit entry into each amended OBD page file. This requires additional overhead costs, both for tracking amended pages (the maintenance of "Dirty" Page lists) and for system calls for their recording. In addition, in terms of the virtual memory subsystem of the OS kernel, the OBD pages modified in the OSP and clearly recorded in the file, may either remain "Dirty" and be rewritten by the OS kernel later, or require additional overhead costs to track, modify and supplement the data. However, on Windows, this data recording path generally provides higher productivity.
+- For Windows, UNICODE definitions of macros added in API`MDBX_DATANAME`, `MDBX_LOCKNAME`and `MDBX_LOCK_SUFFIX`.
+- Switch to type-use priority `size_t` In order to reduce overhead costs on the Elbrus platform.
+- Functions added to API `mdbx_limits_valsize4page_max()` and `mdbx_env_get_valsize4page_max()`Returning the maximum size in bytes, which may be placed in the same large/overflow page, rather than in sequences of two or more such pages. For tables supporting duplicates, taking out values on the large/overflow page is not supported, so the result is consistent with`mdbx_limits_valsize_max()`.
+- Functions added to API `mdbx_limits_pairsize4page_max()` and `mdbx_env_get_pairsize4page_max()` Returning the maximum total size of the pair of key-values in bytes to be placed on the same page, without removing the value to a separate large/overflow page. For tables supporting duplicates, the large/overflow page is not supported, so the result determines the maximum/acceptable total size of the key-value pair.
+- Use of asynchronous (overlapped) Windows entry, including non-bufied input and output `WriteGather()`.This reduces overhead costs and partially circumvents Windows problems with low input-output productivity, including high delays`FlushFileBuffers()`.The new code also consolidates the recorded regions on all platforms, while on Windows, the use of events (events) is reduced to a minimum while automatically using`WriteGather()`.Therefore, there is a significant reduction in overhead costs for OS, and in Windows this acceleration, in some scenarios, may be multiple compared to LMDB.
+- Assembly option added `MDBX_AVOID_MSYNC` which determines the behavior of libmdbx in mode `MDBX_WRITE_MAP` (when data are modified directly on the OBD pages displayed in the OSL):
+   - If `MDBX_AVOID_MSYNC=0` (by default for all systems except Windows), (as in the past) saves data by`msync()`either`FlushViewOfFile()`On Windows platforms with a full virtual memory subsystem and an adequate file output input, this provides a minimum overhead (one system challenge) and maximum productivity. However, Windows is causing significant degradation, including because of post-system-based data-processing problems.`FlushViewOfFile()`Also required to challenge`FlushFileBuffers()`With a mass of problems and fuss inside the OS core.
+   - If `MDBX_AVOID_MSYNC=1` (by default only on Windows), data retention is performed by an explicit entry into each amended OBD page file. This requires additional overhead costs, both for tracking amended pages (the maintenance of "Dirty" Page lists) and for system calls for their recording. In addition, in terms of the virtual memory subsystem of the OS kernel, the OBD pages modified in the OSP and clearly recorded in the file, may either remain "Dirty" and be rewritten by the OS kernel later, or require additional overhead costs to track, modify and supplement the data. However, on Windows, this data recording path generally provides higher productivity.
 - Improved heuristics for the integration of GC auto-merger.
 - Change of LCK format and semantics in some interior fields. Libmdbx versions using different format will not be able to operate with the same OBD at the same time, but only in turn (LCK file rewrites when opening the first OBD opening process).
-- `C++`API Added methods of recording transactions with information on delays.
-- Added`MDBX_HAVE_BUILT IN_CPU_SUPPORTS`Build option to control use GCC's`__builtin_cpu_supports()`function, which could be unavailable on a fake OSes (macos, ios, android, etc).
+- `C++` API Added methods of recording transactions with information on delays.
+- Added `MDBX_HAVE_BUILT IN_CPU_SUPPORTS` Build option to control use GCC's`__builtin_cpu_supports()`function, which could be unavailable on a fake OSes (macos, ios, android, etc).
 
 Corrections (without adjustment of the above new functions):
 
 - Remove a number of warnings when assembled by MinGW.
 - Elimination of false-positive messages from Valgrind about the use of uninitiated data due to levelling gaps in the`struct troika`.
-- Corrected return of unexpected error`MDBX_BUSY`from functions`mdbx_env_set_option()`,
-  `mdbx_env_set_syncbytes()`and`mdbx_env_set_syncperiod()`.
+- Corrected return of unexpected error `MDBX_BUSY` from functions `mdbx_env_set_option()`,
+  `mdbx_env_set_syncbytes()` and `mdbx_env_set_syncperiod()`.
 - Small corrections for compatibility with CMake 3.8
 - More control and caution (paranoia) for defects insurance`mremap()`.
-- A crutch to repair the old versions`stdatomic.h`from GNU Lib C, where the macros`ATOMIC_*_LOCK_FREE`It's a mistake to re-determine over functions.
-- Use`fcntl64(F_GETLK64/F_SETLK64/F_SETLKW64)`This solves the problem of the verification approval response in the assembly of platforms where the type`off_t`wider than the corresponding fields`структуры flock`used to lock files.
+- A crutch to repair the old versions `stdatomic.h` from GNU Lib C, where the macros `ATOMIC_*_LOCK_FREE` It's a mistake to re-determine over functions.
+- Use `fcntl64(F_GETLK64/F_SETLK64/F_SETLKW64)` This solves the problem of the verification approval response in the assembly of platforms where the type`off_t`wider than the corresponding fields`структуры flock`used to lock files.
 - The collection of information on delays in recording transactions has been further developed:
    - Deviation of the measurement of the duration of the update of the GC when the debugging internal audit is included has been eliminated;
    - Protection against undeflow-zero only for total delay in metrics to avoid situations where the sum of individual stages is greater than the total length.
 - A number of corrections to eliminate the operation of the verification approval in debugging assemblies.
-- More cautious conversion to type`mdbx_tid_t`to eliminate warnings.
-- Correction of unnecessary data release to disk mode`MDBX_SAFE_NOSYNC`(b) To update GC.
-- Fixed an extra check for`MDBX_APPENDDUP`inside`mdbx_cursor_put()`What could effect in returning`MDBX_EKEYMISMATCH`for valid cases.
-- Fixed Nasty`clz()`bug`_BitScanReverse()`, only MSVC is active).
+- More cautious conversion to type `mdbx_tid_t` to eliminate warnings.
+- Correction of unnecessary data release to disk mode `MDBX_SAFE_NOSYNC` (b) To update GC.
+- Fixed an extra check for `MDBX_APPENDDUP` inside `mdbx_cursor_put()` What could effect in returning `MDBX_EKEYMISMATCH` for valid cases.
+- Fixed Nasty `clz()` bug `_BitScanReverse()`, only MSVC is active).
 
 Little things:
 
 - The historical references to a gythub-deleted project are diverted to[Web.archive.org](https://web.archive.org/web/https://github.com/erthink/libmdbx "").
 - Synchronized CMake designs between projects.
 - A warning of the security of RICS-V has been added.
-- Added description of parameters`MDBX_debug_func`and`MDBX_debug_func`.
+- Added description of parameters `MDBX_debug_func` and `MDBX_debug_func`.
 - A bypass solution has been added to minimize false-positive conflicts when using file blocks in Windows.
 - Verification of the atomity of C11 operations with 32/64-bit data.
-- 42-fold reduction in silence for`me_options.dp_limit`in the debugging assemblies.
-- Adding the platform`gcc-riscv64-linux-gnu`List for purpose`cross-gcc`.
-- Small Script Edits`long_stochastic.sh`for Windows.
-- Removal of an unnecessary call`LockFileEx()`Inside`mdbx_env_copy()`.
+- 42-fold reduction in silence for `me_options.dp_limit` in the debugging assemblies.
+- Adding the platform `gcc-riscv64-linux-gnu` List for purpose `cross-gcc`.
+- Small Script Edits `long_stochastic.sh` for Windows.
+- Removal of an unnecessary call `LockFileEx()` Inside `mdbx_env_copy()`.
 - A description of the use of file descriptors in different modes has been added.
-- Use added`_CrtDbgReport()`in the debugging assemblies.
+- Use added `_CrtDbgReport()` in the debugging assemblies.
 - Fixed an extra ensure/assertion check of`oldest_reader`inside`txn_end()`.
 - Remodel definition of deprecated use of`MDBX_NODUPDATA`.
 - Fixed decision ASAN/Valgring-under-buildings.

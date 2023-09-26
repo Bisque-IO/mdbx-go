@@ -1,3 +1,4 @@
+#include "mdbx.h"
 
 int mdbx_chk(int argc, char *argv[]);
 

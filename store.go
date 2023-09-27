@@ -114,8 +114,8 @@ func Open(
 	}
 
 	if flags&EnvSafeNoSync != 0 || flags&EnvNoMetaSync != 0 {
-		//syncBytes, _ := env.GetSyncBytes()
-		syncPeriod, _ := env.GetSyncPeriod()
+		//syncBytes, _ := env.SyncBytes()
+		syncPeriod, _ := env.SyncPeriod()
 
 		if syncPeriod > 0 {
 

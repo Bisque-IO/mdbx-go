@@ -19,40 +19,11 @@ import (
 #cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
 #cgo linux LDFLAGS: -lrt
 
-// #define MDBX_ENABLE_MINCORE 1
-// #define MDBX_ENABLE_PREFAULT 1
-// #define MDBX_ENABLE_MADVISE 1
-// #define MDBX_ENABLE_PGOP_STAT 1
-// #define MDBX_TXN_CHECKOWNER 1
-//
-//enum MDBX_warmup_flags_t {
-//MDBX_warmup_default = 0,
-//
-//
-//MDBX_warmup_force = 1,
-//
-//
-//MDBX_warmup_oomsafe = 2,
-//
-//MDBX_warmup_lock = 4,
-//
-//MDBX_warmup_touchlimit = 8,
-//MDBX_warmup_release = 16,
-//};
-//
-//typedef enum MDBX_warmup_flags_t MDBX_warmup_flags_t;
-
-
-
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
 #include "mdbx.h"
 #include "mdbx_utils.h"
-
-//int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
-//                                enum MDBX_warmup_flags_t flags,
-//                                unsigned timeout_seconds_16dot16);
 
 #ifndef likely
 #   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
@@ -70,278 +41,6 @@ import (
 #   endif
 #endif
 
-static int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-int mdbx_cmp_u16(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 2 || b->iov_len < 2)) {
-    return cmp_lexical(a, b);
-  }
-  uint16_t aa = *((uint16_t*)a->iov_base);
-  uint16_t bb = *((uint16_t*)b->iov_base);
-  return bb > aa ? -1 : aa > bb;
-}
-
-int mdbx_cmp_u32(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 4 || b->iov_len < 4)) {
-    return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)b->iov_base);
-  return bb > aa ? -1 : aa > bb;
-}
-
-int mdbx_cmp_u64(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 8 || b->iov_len < 8)) {
-    return cmp_lexical(a, b);
-  }
-  uint64_t aa = *((uint64_t*)a->iov_base);
-  uint64_t bb = *((uint64_t*)b->iov_base);
-  return bb > aa ? -1 : aa > bb;
-}
-
-int mdbx_cmp_u16_prefix_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 2 || b->iov_len < 2)) {
-    return cmp_lexical(a, b);
-  }
-  uint16_t aa = *((uint16_t*)a->iov_base);
-  uint16_t bb = *((uint16_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base+2, b->iov_base+2, a->iov_len-2) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base+2, b->iov_base+2, shortest-2) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-int mdbx_cmp_u16_prefix_u64(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 10 || b->iov_len < 10)) {
-    return cmp_lexical(a, b);
-  }
-  uint16_t aa = *((uint16_t*)a->iov_base);
-  uint16_t bb = *((uint16_t*)a->iov_base);
-  if (aa < bb) return -1;
-  if (aa > bb) return 1;
-  uint64_t aa2 = *((uint64_t*)a->iov_base+2);
-  uint64_t bb2 = *((uint64_t*)b->iov_base+2);
-  if (aa2 < bb2) return -1;
-  if (aa2 > bb2) return 1;
-  return 0;
-}
-
-int mdbx_cmp_u32_prefix_u64_dup_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 12 || b->iov_len < 12)) {
-    return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  if (a->iov_len == b->iov_len) {
-    int result = a->iov_len ? memcmp(a->iov_base+12, b->iov_base+12, a->iov_len-12) : 0;
-	if (result != 0) return result;
-
-	uint64_t aaa = *((uint64_t*)a->iov_base+4);
-	uint64_t bbb = *((uint64_t*)a->iov_base+4);
-	if (aaa < bbb) {
-	  return -1;
-	}
-	if (aaa > bbb) {
-	  return 1;
-	}
-	return 0;
-  }
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base+12, b->iov_base+12, shortest-12) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-int mdbx_cmp_u64_prefix_u64_dup_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 16 || b->iov_len < 16)) {
-    return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  if (a->iov_len == b->iov_len) {
-    int result = a->iov_len ? memcmp(a->iov_base+16, b->iov_base+16, a->iov_len-16) : 0;
-	if (result != 0) return result;
-
-	uint64_t aaa = *((uint64_t*)a->iov_base+8);
-	uint64_t bbb = *((uint64_t*)a->iov_base+8);
-	if (aaa < bbb) {
-	  return -1;
-	}
-	if (aaa > bbb) {
-	  return 1;
-	}
-	return 0;
-  }
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base+16, b->iov_base+16, shortest-16) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-int mdbx_cmp_u32_prefix_u64_dup_u64(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 20 || b->iov_len < 20)) {
-    return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  uint64_t av = *((uint64_t*)a->iov_base+12);
-  uint64_t bv = *((uint64_t*)a->iov_base+12);
-  if (av < bv) {
-	return -1;
-  }
-  if (av > bv) {
-    return 1;
-  }
-  av = *((uint64_t*)a->iov_base+4);
-  bv = *((uint64_t*)a->iov_base+4);
-  if (av < bv) {
-    return -1;
-  }
-  if (av > bv) {
-    return 1;
-  }
-  return 0;
-}
-
-int mdbx_cmp_u64_prefix_u64_dup_u64(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 24 || b->iov_len < 24)) {
-    return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  uint64_t av = *((uint64_t*)a->iov_base+16);
-  uint64_t bv = *((uint64_t*)a->iov_base+16);
-  if (av < bv) {
-	return -1;
-  }
-  if (av > bv) {
-    return 1;
-  }
-  av = *((uint64_t*)a->iov_base+8);
-  bv = *((uint64_t*)a->iov_base+8);
-  if (av < bv) {
-    return -1;
-  }
-  if (av > bv) {
-    return 1;
-  }
-  return 0;
-}
-
-int mdbx_cmp_u32_prefix_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 4 || b->iov_len < 4)) {
-    return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base+4, b->iov_base+4, a->iov_len-4) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base+4, b->iov_base+4, shortest-4) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-int mdbx_cmp_u32_prefix_u64(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 12 || b->iov_len < 12)) {
-   return cmp_lexical(a, b);
-  }
-  uint32_t aa = *((uint32_t*)a->iov_base);
-  uint32_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) return -1;
-  if (aa > bb) return 1;
-  uint64_t aa2 = *((uint64_t*)a->iov_base+4);
-  uint64_t bb2 = *((uint64_t*)b->iov_base+4);
-  if (aa2 < bb2) return -1;
-  if (aa2 > bb2) return 1;
-  return 0;
-}
-
-int mdbx_cmp_u64_prefix_lexical(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 8 || b->iov_len < 8)) {
-    return cmp_lexical(a, b);
-  }
-  uint64_t aa = *((uint64_t*)a->iov_base);
-  uint64_t bb = *((uint64_t*)a->iov_base);
-  if (aa < bb) {
-	return -1;
-  }
-  if (aa > bb) {
-    return 1;
-  }
-  if (a->iov_len == b->iov_len)
-    return a->iov_len ? memcmp(a->iov_base+8, b->iov_base+8, a->iov_len-8) : 0;
-
-  const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
-  const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = shortest ? memcmp(a->iov_base+8, b->iov_base+8, shortest-8) : 0;
-  return likely(diff_data) ? diff_data : diff_len;
-}
-
-int mdbx_cmp_u64_prefix_u64(const MDBX_val *a, const MDBX_val *b) {
-  if (unlikely(a->iov_len < 16 || b->iov_len < 16)) {
-   return cmp_lexical(a, b);
-  }
-  uint64_t aa = *((uint32_t*)a->iov_base);
-  uint64_t bb = *((uint32_t*)a->iov_base);
-  if (aa < bb) return -1;
-  if (aa > bb) return 1;
-  aa = *((uint64_t*)a->iov_base+8);
-  bb = *((uint64_t*)b->iov_base+8);
-  if (aa < bb) return -1;
-  if (aa > bb) return 1;
-  return 0;
-}
 
 typedef struct mdbx_strerror_t {
 	size_t result;
@@ -803,6 +502,27 @@ void do_mdbx_cursor_get(size_t arg0, size_t arg1) {
 	);
 }
 
+typedef struct do_mdbx_cursor_get_batch_t {
+	size_t cursor;
+	size_t count;
+	size_t pairs;
+	size_t limit;
+	int32_t op;
+	int32_t result;
+} do_mdbx_cursor_get_batch_t;
+
+void do_mdbx_cursor_get_batch(size_t arg0, size_t arg1) {
+	do_mdbx_cursor_get_batch_t* args = (do_mdbx_cursor_get_batch_t*)(void*)arg0;
+	args->result = (int32_t)mdbx_cursor_get_batch(
+		(MDBX_cursor *)(void*)args->cursor,
+		&args->count,
+		(MDBX_val*)args->pairs,
+		args->limit,
+		(MDBX_cursor_op)args->op
+	);
+}
+
+
 typedef struct mdbx_cursor_put_t {
 	size_t cursor;
 	size_t key;
@@ -908,11 +628,30 @@ void do_mdbx_estimate_distance(size_t arg0, size_t arg1) {
 //	int32_t result;
 //} mdbx_estimate_move_t;
 
-//static int do_mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
-//                                int flags,
-//                                unsigned timeout_seconds_16dot16) {
-//	return mdbx_env_warmup(env, txn, flags, timeout_seconds_16dot16);
-//}
+typedef struct do_mdbx_is_dirty_t {
+	size_t txn;
+	size_t ptr;
+	int64_t result;
+} do_mdbx_is_dirty_t;
+
+void do_mdbx_is_dirty(size_t arg0, size_t arg1) {
+	do_mdbx_is_dirty_t* args = (do_mdbx_is_dirty_t*)(void*)arg0;
+	args->result = (int64_t)mdbx_is_dirty((const MDBX_txn *)(void*)args->txn, (const void *)args->ptr);
+}
+
+typedef struct do_mdbx_dbi_sequence_t {
+	size_t txn;
+	size_t dbi;
+	uint64_t result;
+	uint64_t increment;
+	int64_t outcome;
+} do_mdbx_dbi_sequence_t;
+
+void do_mdbx_dbi_sequence(size_t arg0, size_t arg1) {
+	do_mdbx_dbi_sequence_t* args = (do_mdbx_dbi_sequence_t*)(void*)arg0;
+	args->outcome = (int64_t)mdbx_dbi_sequence((MDBX_txn *)(void*)args->txn,
+		(MDBX_dbi)args->dbi, &args->result, args->increment);
+}
 
 #include <stdio.h>
 
@@ -939,23 +678,63 @@ func init() {
 	}
 }
 
-type Cmp C.MDBX_cmp_func
+type RamInfo struct {
+	PageSize   int64
+	TotalPages int64
+	AvailPages int64
+}
 
-var (
-	CmpU16                    = (*Cmp)(C.mdbx_cmp_u16)
-	CmpU32                    = (*Cmp)(C.mdbx_cmp_u32)
-	CmpU64                    = (*Cmp)(C.mdbx_cmp_u64)
-	CmpU16PrefixLexical       = (*Cmp)(C.mdbx_cmp_u16_prefix_lexical)
-	CmpU16PrefixU64           = (*Cmp)(C.mdbx_cmp_u16_prefix_u64)
-	CmpU32PrefixLexical       = (*Cmp)(C.mdbx_cmp_u32_prefix_lexical)
-	CmpU32PrefixU64           = (*Cmp)(C.mdbx_cmp_u32_prefix_u64)
-	CmpU64PrefixLexical       = (*Cmp)(C.mdbx_cmp_u64_prefix_lexical)
-	CmpU64PrefixU64           = (*Cmp)(C.mdbx_cmp_u64_prefix_u64)
-	CmpU32PrefixU64DupLexical = (*Cmp)(C.mdbx_cmp_u32_prefix_u64_dup_lexical)
-	CmpU32PrefixU64DupU64     = (*Cmp)(C.mdbx_cmp_u32_prefix_u64_dup_u64)
-	CmpU64PrefixU64DupLexical = (*Cmp)(C.mdbx_cmp_u64_prefix_u64_dup_lexical)
-	CmpU64PrefixU64DupU64     = (*Cmp)(C.mdbx_cmp_u64_prefix_u64_dup_u64)
-)
+// \brief Returns basic information about system RAM.
+// This function provides a portable way to get information about available RAM
+// and can be useful in that it returns the same information that libmdbx uses
+// internally to adjust various options and control readahead.
+// \ingroup c_statinfo
+//
+// \param [out] page_size     Optional address where the system page size
+//
+//	will be stored.
+//
+// \param [out] total_pages   Optional address where the number of total RAM
+//
+//	pages will be stored.
+//
+// \param [out] avail_pages   Optional address where the number of
+//
+//	available/free RAM pages will be stored.
+//
+// \returns A non-zero error value on failure and 0 on success. */
+func SysRamInfo() (result RamInfo, err Error) {
+	err = Error(C.mdbx_get_sysraminfo(
+		(*C.intptr_t)(unsafe.Pointer(&result.PageSize)),
+		(*C.intptr_t)(unsafe.Pointer(&result.TotalPages)),
+		(*C.intptr_t)(unsafe.Pointer(&result.AvailPages)),
+	))
+	return result, err
+}
+
+// \brief Find out whether to use readahead or not, based on the given database
+// size and the amount of available memory.
+// \ingroup c_extra
+//
+// \param [in] volume      The expected database size in bytes.
+// \param [in] redundancy  Additional reserve or overload in case of negative
+//
+//	value.
+//
+// \returns A \ref MDBX_RESULT_TRUE or \ref MDBX_RESULT_FALSE value,
+//
+//	otherwise the error code:
+//
+// \retval MDBX_RESULT_TRUE   Readahead is reasonable.
+// \retval MDBX_RESULT_FALSE  Readahead is NOT reasonable,
+//
+//	i.e. \ref MDBX_NORDAHEAD is useful to
+//	open environment by \ref mdbx_env_open().
+//
+// \retval Otherwise the error code.
+func IsReadAheadReasonable(expectedDBSize int64, redundancy int64) bool {
+	return C.mdbx_is_readahead_reasonable(C.size_t(expectedDBSize), C.intptr_t(redundancy)) == C.int(ErrResultTrue)
+}
 
 // // Chk invokes the embedded mdbx_chk utility
 // // usage: mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] dbpath
@@ -2668,6 +2447,64 @@ func (env *Env) MaxKeySize() int {
 	return int(C.mdbx_env_get_maxkeysize_ex(env.env, 0))
 }
 
+// \brief Returns maximal size of key-value pair to fit in a single page
+// for specified database flags.
+// \ingroup c_statinfo
+//
+// \param [in] env    An environment handle returned by \ref mdbx_env_create().
+// \param [in] flags  Database options (\ref MDBX_DUPSORT, \ref MDBX_INTEGERKEY
+//
+//	and so on). \see db_flags
+//
+// \returns The maximum size of a data can write,
+//
+//	or -1 if something is wrong.
+func (env *Env) PairSize4PageMax(flags DBFlags) int {
+	return int(C.mdbx_env_get_pairsize4page_max(env.env, C.MDBX_db_flags_t(flags)))
+}
+
+// \brief Returns maximal data size in bytes to fit in a leaf-page or
+// single overflow/large-page for specified database flags.
+// \ingroup c_statinfo
+//
+// \param [in] env    An environment handle returned by \ref mdbx_env_create().
+// \param [in] flags  Database options (\ref MDBX_DUPSORT, \ref MDBX_INTEGERKEY
+//
+//	and so on). \see db_flags
+//
+// \returns The maximum size of a data can write,
+//
+//	or -1 if something is wrong.
+func (env *Env) ValSize4PageMax(flags DBFlags) int {
+	return int(C.mdbx_env_get_valsize4page_max(env.env, C.MDBX_db_flags_t(flags)))
+}
+
+// \brief Sets application information (a context pointer) associated with
+// the environment.
+// \see mdbx_env_get_userctx()
+// \ingroup c_settings
+//
+// \param [in] env  An environment handle returned by \ref mdbx_env_create().
+// \param [in] ctx  An arbitrary pointer for whatever the application needs.
+//
+// \returns A non-zero error value on failure and 0 on success.
+func (env *Env) SetUserCtx(ctx uintptr) Error {
+	return Error(C.mdbx_env_set_userctx(env.env, unsafe.Pointer(ctx)))
+}
+
+// \brief Returns an application information (a context pointer) associated
+// with the environment.
+// \see mdbx_env_set_userctx()
+// \ingroup c_statinfo
+//
+// \param [in] env An environment handle returned by \ref mdbx_env_create()
+// \returns The pointer set by \ref mdbx_env_set_userctx()
+//
+//	or `NULL` if something wrong. */
+func (env *Env) UserCtx() uintptr {
+	return uintptr(C.mdbx_env_get_userctx(env.env))
+}
+
 // Close the environment and release the memory map.
 // \ingroup c_opening
 //
@@ -2767,7 +2604,7 @@ func (env *Env) SetFlags(flags EnvFlags, onoff bool) Error {
 //	some possible errors are:
 //
 // \retval MDBX_EINVAL An invalid parameter was specified.
-func (env *Env) GetFlags() (EnvFlags, Error) {
+func (env *Env) Flags() (EnvFlags, Error) {
 	flags := C.unsigned(0)
 	err := Error(C.mdbx_env_get_flags(env.env, &flags))
 	return EnvFlags(flags), err
@@ -3287,10 +3124,10 @@ func (info *EnvInfo) Hydrate(from *C.MDBX_envinfo) {
 	info.PGOpStat.Spill = uint64(from.mi_pgop_stat.spill)
 	info.PGOpStat.UnSpill = uint64(from.mi_pgop_stat.unspill)
 	info.PGOpStat.Wops = uint64(from.mi_pgop_stat.wops)
-	// info.PGOpStat.PreFault = uint64(from.mi_pgop_stat.prefault)
-	// info.PGOpStat.Mincore = uint64(from.mi_pgop_stat.mincore)
-	// info.PGOpStat.Msync = uint64(from.mi_pgop_stat.msync)
-	// info.PGOpStat.Fsync = uint64(from.mi_pgop_stat.fsync)
+	info.PGOpStat.PreFault = uint64(from.mi_pgop_stat.prefault)
+	info.PGOpStat.Mincore = uint64(from.mi_pgop_stat.mincore)
+	info.PGOpStat.Msync = uint64(from.mi_pgop_stat.msync)
+	info.PGOpStat.Fsync = uint64(from.mi_pgop_stat.fsync)
 }
 
 func (env *Env) Info(tx *Tx) (EnvInfo, Error) {
@@ -3410,7 +3247,7 @@ func (env *Env) SetMaxDBS(max uint16) Error {
 // the first process interacts with the database.
 //
 // \see mdbx_env_set_maxreaders() \see mdbx_env_get_maxreaders()
-func (env *Env) GetMaxReaders() (uint64, Error) {
+func (env *Env) MaxReaders() (uint64, Error) {
 	return env.GetOption(OptMaxReaders)
 }
 
@@ -3436,7 +3273,7 @@ func (env *Env) SetMaxReaders(max uint64) Error {
 // buffers to disk, if \ref MDBX_SAFE_NOSYNC is used.
 //
 // \see mdbx_env_set_syncbytes() \see mdbx_env_get_syncbytes()
-func (env *Env) GetSyncBytes() (uint64, Error) {
+func (env *Env) SyncBytes() (uint64, Error) {
 	return env.GetOption(OptSyncBytes)
 }
 
@@ -3452,7 +3289,7 @@ func (env *Env) SetSyncBytes(bytes uint64) Error {
 // unsteady commit to force flush the data buffers to disk,
 // if \ref MDBX_SAFE_NOSYNC is used.
 // \see mdbx_env_set_syncperiod() \see mdbx_env_get_syncperiod()
-func (env *Env) GetSyncPeriod() (uint64, Error) {
+func (env *Env) SyncPeriod() (uint64, Error) {
 	return env.GetOption(OptSyncPeriod)
 }
 
@@ -3481,7 +3318,7 @@ func (env *Env) SetSyncPeriod(period uint64) Error {
 //
 // The `MDBX_opt_rp_augment_limit` controls described limit for the current
 // process. Default is 262144, it is usually enough for most cases.
-func (env *Env) GetRPAugmentLimit() (uint64, Error) {
+func (env *Env) RPAugmentLimit() (uint64, Error) {
 	return env.GetOption(OptRpAugmentLimit)
 }
 
@@ -3517,7 +3354,7 @@ func (env *Env) SetRPAugmentLimit(limit uint64) Error {
 //
 // The `MDBX_opt_loose_limit` allows you to set a limit for such cache inside
 // the current process. Should be in the range 0..255, default is 64.
-func (env *Env) GetLooseLimit() (uint64, Error) {
+func (env *Env) LooseLimit() (uint64, Error) {
 	return env.GetOption(OptLooseLimit)
 }
 
@@ -3548,7 +3385,7 @@ func (env *Env) SetLooseLimit(limit uint64) Error {
 //
 // The `MDBX_opt_dp_reserve_limit` allows you to set a limit for such reserve
 // inside the current process. Default is 1024.
-func (env *Env) GetDPReserveLimit() (uint64, Error) {
+func (env *Env) DPReserveLimit() (uint64, Error) {
 	return env.GetOption(OptDpReserveLimit)
 }
 
@@ -3580,7 +3417,7 @@ func (env *Env) SetDPReserveLimit(limit uint64) Error {
 //
 // The `MDBX_opt_txn_dp_limit` controls described threshold for the current
 // process. Default is 65536, it is usually enough for most cases.
-func (env *Env) GetTxDPLimit() (uint64, Error) {
+func (env *Env) TxDPLimit() (uint64, Error) {
 	return env.GetOption(OptTxnDpLimit)
 }
 
@@ -3602,7 +3439,7 @@ func (env *Env) SetTxDPLimit(limit uint64) Error {
 
 // GetTxDPInitial Controls the in-process initial allocation size for dirty pages
 // list of a write transaction. Default is 1024.
-func (env *Env) GetTxDPInitial() (uint64, Error) {
+func (env *Env) TxDPInitial() (uint64, Error) {
 	return env.GetOption(OptTxnDpInitial)
 }
 
@@ -3626,7 +3463,7 @@ func (env *Env) SetTxDPInitial(initial uint64) Error {
 // Should be in the range 0..255, where zero means no restriction at the
 // bottom. Default is 8, i.e. at least the 1/8 of the current dirty pages
 // should be spilled when reached the condition described above.
-func (env *Env) GetSpillMinDenominator() (uint64, Error) {
+func (env *Env) SpillMinDenominator() (uint64, Error) {
 	return env.GetOption(OptSpillMinDenomiator)
 }
 
@@ -3662,7 +3499,7 @@ func (env *Env) SetSpillMinDenominator(min uint64) Error {
 // Should be in the range 0..255, where zero means no limit, i.e. all dirty
 // pages could be spilled. Default is 8, i.e. no more than 7/8 of the current
 // dirty pages may be spilled when reached the condition described above.
-func (env *Env) GetSpillMaxDenominator() (uint64, Error) {
+func (env *Env) SpillMaxDenominator() (uint64, Error) {
 	return env.GetOption(OptSpillMaxDenomiator)
 }
 
@@ -3705,7 +3542,7 @@ func (env *Env) SetSpillMaxDenominator(max uint64) Error {
 // be performed during starting nested transactions.
 // Default is 0, i.e. by default no spilling performed during starting nested
 // transactions, that correspond historically behaviour.
-func (env *Env) GetSpillParent4ChildDeominator() (uint64, Error) {
+func (env *Env) SpillParent4ChildDeominator() (uint64, Error) {
 	return env.GetOption(OptSpillParent4ChildDenominator)
 }
 
@@ -3743,7 +3580,7 @@ func (env *Env) SetSpillParent4ChildDeominator(value uint64) Error {
 // format. The specified value must be in the range from 12.5% (almost empty)
 // to 50% (half empty) which corresponds to the range from 8192 and to 32768
 // in units respectively.
-func (env *Env) GetMergeThreshold16Dot16Percent() (uint64, Error) {
+func (env *Env) MergeThreshold16Dot16Percent() (uint64, Error) {
 	return env.GetOption(OptMergeThreshold16Dot16Percent)
 }
 
@@ -3789,7 +3626,7 @@ func (env *Env) SetMergeThreshold16Dot16Percent(percent uint64) Error {
 // mode without \ref MDBX_WRITEMAP, and not supported on Windows.
 // On Windows a write-through is used always but \ref MDBX_NOMETASYNC could
 // be used for switching to write-and-flush.
-func (env *Env) GetOptWriteThroughThreshold() (uint64, Error) {
+func (env *Env) OptWriteThroughThreshold() (uint64, Error) {
 	return env.GetOption(OptWriteThroughThreshold)
 }
 
@@ -3877,20 +3714,20 @@ func (w WarmupFlags) String() string {
 const (
 	// By default \ref mdbx_env_warmup() just ask OS kernel to asynchronously
 	// prefetch database pages.
-	WarmupDefault = WarmupFlags(0)
+	WarmupDefault = WarmupFlags(C.MDBX_warmup_default)
 
 	// Peeking all pages of allocated portion of the database
 	// to force ones to be loaded into memory. However, the pages are just peeks
 	// sequentially, so unused pages that are in GC will be loaded in the same
 	// way as those that contain payload.
-	WarmupForce = WarmupFlags(1)
+	WarmupForce = WarmupFlags(C.MDBX_warmup_force)
 
 	// Using system calls to peeks pages instead of directly accessing ones,
 	// which at the cost of additional overhead avoids killing the current
 	// process by OOM-killer in a lack of memory condition.
 	// \note Has effect only on POSIX (non-Windows) systems with conjunction
 	// to \ref MDBX_warmup_force option.
-	WarmupOOMSafe = WarmupFlags(2)
+	WarmupOOMSafe = WarmupFlags(C.MDBX_warmup_oomsafe)
 
 	// Try to lock database pages in memory by `mlock()` on POSIX-systems
 	// or `VirtualLock()` on Windows. Please refer to description of these
@@ -3905,7 +3742,7 @@ const (
 	// containing payload, will be locked in memory until the environment closes,
 	// or explicitly unblocked by using \ref MDBX_warmup_release, or the
 	// database geomenry will changed, including its auto-shrinking. */
-	WarmupLock = WarmupFlags(4)
+	WarmupLock = WarmupFlags(C.MDBX_warmup_lock)
 
 	// Alters corresponding current resource limits to be enough for lock pages
 	// by \ref MDBX_warmup_lock. However, this option should be used in simpler
@@ -3913,10 +3750,10 @@ const (
 	// disregarding all other factors. For real-world database application you
 	// will need full-fledged management of resources and their limits with
 	// respective engineering.
-	WarmupTouchLimit = WarmupFlags(8)
+	WarmupTouchLimit = WarmupFlags(C.MDBX_warmup_touchlimit)
 
 	// Release the lock that was performed before by \ref MDBX_warmup_lock.
-	WarmupRelease = WarmupFlags(16)
+	WarmupRelease = WarmupFlags(C.MDBX_warmup_release)
 )
 
 // \brief Warms up the database by loading pages into memory, optionally lock
@@ -5315,7 +5152,13 @@ func (tx *Tx) Put(dbi DBI, key *Val, data *Val, flags PutFlags) Error {
 // \see \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
 //
 // \returns A non-zero error value on failure and 0 on success.
-func (tx *Tx) Replace(dbi DBI, key *Val, data *Val, oldData *Val, flags PutFlags) Error {
+func (tx *Tx) Replace(
+	dbi DBI,
+	key *Val,
+	data *Val,
+	oldData *Val,
+	flags PutFlags,
+) Error {
 	args := struct {
 		txn     uintptr
 		key     uintptr
@@ -5382,6 +5225,99 @@ func (tx *Tx) Delete(dbi DBI, key *Val, data *Val) Error {
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_del), ptr, 0)
 	return args.result
+}
+
+// \brief Determines whether the given address is on a dirty database page of
+// the transaction or not.
+// \ingroup c_statinfo
+//
+// Ultimately, this allows to avoid copy data from non-dirty pages.
+//
+// "Dirty" pages are those that have already been changed during a write
+// transaction. Accordingly, any further changes may result in such pages being
+// overwritten. Therefore, all functions libmdbx performing changes inside the
+// database as arguments should NOT get pointers to data in those pages. In
+// turn, "not dirty" pages before modification will be copied.
+//
+// In other words, data from dirty pages must either be copied before being
+// passed as arguments for further processing or rejected at the argument
+// validation stage. Thus, `mdbx_is_dirty()` allows you to get rid of
+// unnecessary copying, and perform a more complete check of the arguments.
+//
+// \note The address passed must point to the beginning of the data. This is
+// the only way to ensure that the actual page header is physically located in
+// the same memory page, including for multi-pages with long data.
+//
+// \note In rare cases the function may return a false positive answer
+// (\ref MDBX_RESULT_TRUE when data is NOT on a dirty page), but never a false
+// negative if the arguments are correct.
+//
+// \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
+// \param [in] ptr      The address of data to check.
+//
+// \returns A MDBX_RESULT_TRUE or MDBX_RESULT_FALSE value,
+//
+//	otherwise the error code:
+//
+// \retval MDBX_RESULT_TRUE    Given address is on the dirty page.
+// \retval MDBX_RESULT_FALSE   Given address is NOT on the dirty page.
+// \retval Otherwise the error code. */
+func (tx *Tx) IsDirty(ptr uintptr) Error {
+	args := struct {
+		txn    uintptr
+		ptr    uintptr
+		result int64
+	}{
+		txn: uintptr(unsafe.Pointer(tx.txn)),
+		ptr: ptr,
+	}
+	unsafecgo.NonBlocking((*byte)(C.do_mdbx_is_dirty), uintptr(unsafe.Pointer(&args)), 0)
+	return Error(args.result)
+}
+
+// \brief Sequence generation for a database.
+// \ingroup c_crud
+//
+// The function allows to create a linear sequence of unique positive integers
+// for each database. The function can be called for a read transaction to
+// retrieve the current sequence value, and the increment must be zero.
+// Sequence changes become visible outside the current write transaction after
+// it is committed, and discarded on abort.
+//
+// \param [in] txn        A transaction handle returned
+//
+//	by \ref mdbx_txn_begin().
+//
+// \param [in] dbi        A database handle returned by \ref mdbx_dbi_open().
+// \param [out] result    The optional address where the value of sequence
+//
+//	before the change will be stored.
+//
+// \param [in] increment  Value to increase the sequence,
+//
+//	must be 0 for read-only transactions.
+//
+// \returns A non-zero error value on failure and 0 on success,
+//
+//	some possible errors are:
+//
+// \retval MDBX_RESULT_TRUE   Increasing the sequence has resulted in an
+//
+//	overflow and therefore cannot be executed.
+func (tx *Tx) DBISequence(dbi DBI, increment uint64) (result uint64, err Error) {
+	args := struct {
+		txn       uintptr
+		dbi       uintptr
+		result    uint64
+		increment uint64
+		outcome   int64
+	}{
+		txn:       uintptr(unsafe.Pointer(tx.txn)),
+		dbi:       uintptr(dbi),
+		increment: increment,
+	}
+	unsafecgo.NonBlocking((*byte)(C.do_mdbx_dbi_sequence), uintptr(unsafe.Pointer(&args)), 0)
+	return args.result, Error(args.outcome)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -5685,6 +5621,69 @@ func (cur *Cursor) Get(key *Val, data *Val, op CursorOp) Error {
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_get), ptr, 0)
 	return args.result
+}
+
+// \brief Retrieve multiple non-dupsort key/value pairs by cursor.
+// \ingroup c_crud
+//
+// This function retrieves multiple key/data pairs from the database without
+// \ref MDBX_DUPSORT option. For `MDBX_DUPSORT` databases please
+// use \ref MDBX_GET_MULTIPLE and \ref MDBX_NEXT_MULTIPLE.
+//
+// The number of key and value items is returned in the `size_t count`
+// refers. The addresses and lengths of the keys and values are returned in the
+// array to which `pairs` refers.
+// \see mdbx_cursor_get()
+//
+// \param [in] cursor     A cursor handle returned by \ref mdbx_cursor_open().
+// \param [out] count     The number of key and value item returned, on success
+//
+//	it always be the even because the key-value
+//	pairs are returned.
+//
+// \param [in,out] pairs  A pointer to the array of key value pairs.
+// \param [in] limit      The size of pairs buffer as the number of items,
+//
+//	but not a pairs.
+//
+// \param [in] op         A cursor operation \ref MDBX_cursor_op (only
+//
+//	\ref MDBX_FIRST, \ref MDBX_NEXT, \ref MDBX_GET_CURRENT
+//	are supported).
+//
+// \returns A non-zero error value on failure and 0 on success,
+//
+//	some possible errors are:
+//
+// \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+//
+//	by current thread.
+//
+// \retval MDBX_NOTFOUND         No more key-value pairs are available.
+// \retval MDBX_ENODATA          The cursor is already at the end of data.
+// \retval MDBX_RESULT_TRUE      The specified limit is less than the available
+//
+//	key-value pairs on the current page/position
+//	that the cursor points to.
+//
+// \retval MDBX_EINVAL           An invalid parameter was specified.
+func (cur *Cursor) GetBatch(data []Val, op CursorOp) ([]Val, Error) {
+	args := struct {
+		cursor uintptr
+		count  uintptr
+		pairs  uintptr
+		limit  uintptr
+		op     CursorOp
+		result Error
+	}{
+		cursor: uintptr(unsafe.Pointer(cur)),
+		pairs:  uintptr(unsafe.Pointer(&data[0])),
+		limit:  uintptr(len(data)),
+		op:     op,
+	}
+	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_get_batch), uintptr(unsafe.Pointer(&args)), 0)
+	data = data[0:args.count]
+	return data, args.result
 }
 
 // Put Store by cursor.

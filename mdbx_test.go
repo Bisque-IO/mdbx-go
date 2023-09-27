@@ -2,6 +2,7 @@ package mdbx
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -9,6 +10,26 @@ import (
 	"testing"
 	"unsafe"
 )
+
+func stringify(v interface{}) string {
+	d, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	return string(d)
+}
+
+func TestSysRamInfo(t *testing.T) {
+	info, err := SysRamInfo()
+	if err != ErrSuccess {
+		t.Fatal(err)
+	}
+	fmt.Println(stringify(info))
+}
+
+func TestIsReadAheadReasonable(t *testing.T) {
+	fmt.Println("IsReadAheadReasonable:", IsReadAheadReasonable(1024*1024*1024*4, 0))
+}
 
 func TestChk(t *testing.T) {
 	//defer os.Remove("testdata/db.dat")

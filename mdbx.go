@@ -16,7 +16,7 @@ import (
 
 /*
 //#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DMDBX_DEBUG=0 -DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1 -std=gnu11 -fvisibility=hidden -ffast-math  -fPIC -pthread -Wno-error=attributes -W -Wall -Werror -Wextra -Wpedantic -Wno-deprecated-declarations -Wno-format -Wno-implicit-fallthrough -Wno-unused-parameter -Wno-format-extra-args -Wno-missing-field-initializers
-#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
+#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_PNL_ASCENDING=1 -DMDBX_ENABLE_BIGFOOT=1 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
 #cgo linux LDFLAGS: -lrt
 
 #include <stdlib.h>
@@ -555,6 +555,105 @@ void do_mdbx_cursor_del(size_t arg0, size_t arg1) {
 	);
 }
 
+typedef struct mdbx_cursor_del_integer_range_t {
+	size_t tx;
+	size_t cursor;
+	uint64_t low;
+	uint64_t high;
+	uint64_t max_count;
+	uint64_t count;
+	uint64_t first;
+	uint64_t last;
+	uint32_t dbi;
+	int32_t result;
+} mdbx_cursor_del_integer_range_t;
+
+void do_mdbx_del_integer_range(size_t arg0, size_t arg1) {
+	mdbx_cursor_del_integer_range_t* args = (mdbx_cursor_del_integer_range_t*)(void*)arg0;
+	MDBX_cursor* cursor = (MDBX_cursor*)(void*)args->cursor;
+	int cursor_created = 0;
+	if (!cursor) {
+		cursor_created = 1;
+		args->result = (int32_t)mdbx_cursor_open(
+			(MDBX_txn*)(void*)args->tx,
+			(MDBX_dbi)args->dbi,
+			(MDBX_cursor**)(void*)&cursor
+		);
+		if (args->result != MDBX_SUCCESS) {
+			return;
+		}
+	}
+	MDBX_val key, val;
+	uint64_t key_value = (uint64_t)args->low;
+	uint64_t current = key_value;
+	uint64_t high = (uint64_t)args->high;
+	key.iov_base = (void*)&key_value;
+	key.iov_len = 8;
+	uint64_t count = 0;
+	uint64_t max_count = args->max_count;
+
+	MDBX_error_t err;
+
+	err = mdbx_cursor_get(cursor, &key, &val, MDBX_SET_RANGE);
+	if (err != MDBX_SUCCESS) {
+		args->result = (int32_t)err;
+		if (cursor_created) {
+			mdbx_cursor_close(cursor);
+		}
+		return;
+	}
+
+	current = *((uint64_t*)key.iov_base);
+	args->first = current;
+
+	if (current > high) {
+		if (cursor_created) {
+			mdbx_cursor_close(cursor);
+		}
+		return;
+	}
+
+	do {
+		err = mdbx_cursor_del(
+			cursor,
+			MDBX_CURRENT
+		);
+
+		if (err != MDBX_SUCCESS) {
+			args->result = (int32_t)err;
+			args->count = count;
+			args->last = current;
+			if (cursor_created) {
+				mdbx_cursor_close(cursor);
+			}
+			return;
+		}
+
+		count++;
+		if (count >= max_count) {
+			args->count = count;
+			args->last = current;
+			if (cursor_created) {
+				mdbx_cursor_close(cursor);
+			}
+			return;
+		}
+
+		err = mdbx_cursor_get(cursor, &key, &val, MDBX_GET_CURRENT);
+		if (err != MDBX_SUCCESS) {
+			args->result = (int32_t)err;
+			args->count = count;
+			args->last = current;
+			if (cursor_created) {
+				mdbx_cursor_close(cursor);
+			}
+			return;
+		}
+
+		current = *((uint64_t*)key.iov_base);
+	} while (current < high);
+}
+
 typedef struct mdbx_cursor_count_t {
 	size_t cursor;
 	size_t count;
@@ -736,20 +835,20 @@ func IsReadAheadReasonable(expectedDBSize int64, redundancy int64) bool {
 	return C.mdbx_is_readahead_reasonable(C.size_t(expectedDBSize), C.intptr_t(redundancy)) == C.int(ErrResultTrue)
 }
 
-// // Chk invokes the embedded mdbx_chk utility
-// // usage: mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] dbpath
-// //
-// //	-V            print version and exit
-// //	-v            more verbose, could be used multiple times
-// //	-q            be quiet
-// //	-c            force cooperative mode (don't try exclusive)
-// //	-w            write-mode checking
-// //	-d            disable page-by-page traversal of B-tree
-// //	-i            ignore wrong order errors (for custom comparators case)
-// //	-s subdb      process a specific subdatabase only
-// //	-0|1|2        force using specific meta-page 0, or 2 for checking
-// //	-t            turn to a specified meta-page on successful check
-// //	-T            turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
+// Chk invokes the embedded mdbx_chk utility
+// usage: mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] dbpath
+//
+//	-V            print version and exit
+//	-v            more verbose, could be used multiple times
+//	-q            be quiet
+//	-c            force cooperative mode (don't try exclusive)
+//	-w            write-mode checking
+//	-d            disable page-by-page traversal of B-tree
+//	-i            ignore wrong order errors (for custom comparators case)
+//	-s subdb      process a specific subdatabase only
+//	-0|1|2        force using specific meta-page 0, or 2 for checking
+//	-t            turn to a specified meta-page on successful check
+//	-T            turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
 func Chk(args ...string) (result int32, output []byte, err error) {
 	argv := make([]*C.char, len(args)+1)
 	argv[0] = C.CString("mdbx_chk")
@@ -875,6 +974,120 @@ func StatMain(args ...string) {
 	}()
 
 	os.Exit(int(C.mdbx_stat((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
+}
+
+// Copy invokes the embedded mdbx_copy utility.
+// usage: mdbx_copy [-V] [-q] [-c] [-u|U] src_path [dest_path]
+//
+//	-V 			print version and exit
+//	-q 			be quiet
+//	-c 			enable compactification (skip unused pages)
+//	-u 			warmup database before copying
+//	-U 			warmup and try lock database pages in memory before copying
+//	src_path 	source database
+//	dest_path 	destination (stdout if not specified)
+func Copy(args ...string) (result int32, output []byte, err error) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_copy")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+	output, err = capture.CaptureWithCGo(func() {
+		result = int32(C.mdbx_copy((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
+	})
+	return
+}
+
+// CopyMain invokes the embedded mdbx_copy utility and exits the program.
+// usage: mdbx_copy [-V] [-q] [-c] [-u|U] src_path [dest_path]
+//
+//	-V 			print version and exit
+//	-q 			be quiet
+//	-c 			enable compactification (skip unused pages)
+//	-u 			warmup database before copying
+//	-U 			warmup and try lock database pages in memory before copying
+//	src_path 	source database
+//	dest_path 	destination (stdout if not specified)
+func CopyMain(args ...string) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_copy")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+
+	os.Exit(int(C.mdbx_copy((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
+}
+
+// Dump invokes the embedded mdbx_dump utility.
+// usage: mdbx_dump [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U]
+// dbpath
+//
+//	-V		print version and exit
+//	-q		be quiet
+//	-f		write to file instead of stdout
+//	-l		list subDBs and exit
+//	-p		use printable characters
+//	-r		rescue mode (ignore errors to dump corrupted DB)
+//	-a		dump main DB and all subDBs
+//	-s		name dump only the specified named subDB
+//	-u		warmup database before dumping
+//	-U		warmup and try lock database pages in memory before dumping
+//	    	by default dump only the main DB,
+func Dump(args ...string) (result int32, output []byte, err error) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_dump")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+	output, err = capture.CaptureWithCGo(func() {
+		result = int32(C.mdbx_dump((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
+	})
+	return
+}
+
+// DumpMain invokes the embedded mdbx_dump utility and exits the program.
+// usage: mdbx_dump [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U]
+// dbpath
+//
+//	-V		print version and exit
+//	-q		be quiet
+//	-f		write to file instead of stdout
+//	-l		list subDBs and exit
+//	-p		use printable characters
+//	-r		rescue mode (ignore errors to dump corrupted DB)
+//	-a		dump main DB and all subDBs
+//	-s		name dump only the specified named subDB
+//	-u		warmup database before dumping
+//	-U		warmup and try lock database pages in memory before dumping
+//	    	by default dump only the main DB,
+func DumpMain(args ...string) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_dump")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+
+	os.Exit(int(C.mdbx_dump((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
 }
 
 type LogLevel int32
@@ -4592,7 +4805,7 @@ func (tx *Tx) EnvInfo(info *EnvInfo) Error {
 // until the completion of read transactions which opened them.
 //
 // Nevertheless, the handle for the NEWLY CREATED database will be invisible
-// for other transactions until the this write transaction is successfully
+// for other transactions until this write transaction is successfully
 // committed. If the write transaction is aborted the handle will be closed
 // automatically. After a successful commit the such handle will reside in the
 // shared environment, and may be used by other transactions.
@@ -5227,6 +5440,32 @@ func (tx *Tx) Delete(dbi DBI, key *Val, data *Val) Error {
 	return args.result
 }
 
+// DeleteIntegerRange deletes a range of records (key >= low && key <= high)
+func (tx *Tx) DeleteIntegerRange(dbi DBI, low, high, maxCount uint64) (first uint64, last uint64, count uint64, err Error) {
+	args := struct {
+		tx       uintptr
+		cursor   uintptr
+		low      uint64
+		high     uint64
+		maxCount uint64
+		count    uint64
+		first    uint64
+		last     uint64
+		dbi      uint32
+		result   Error
+	}{
+		tx:       uintptr(unsafe.Pointer(tx.txn)),
+		cursor:   0, // Cursor will be created internally
+		low:      low,
+		high:     high,
+		maxCount: maxCount,
+		dbi:      uint32(dbi),
+	}
+	ptr := uintptr(unsafe.Pointer(&args))
+	unsafecgo.NonBlocking((*byte)(C.do_mdbx_del_integer_range), ptr, 0)
+	return args.first, args.last, args.count, args.result
+}
+
 // \brief Determines whether the given address is on a dirty database page of
 // the transaction or not.
 // \ingroup c_statinfo
@@ -5845,6 +6084,31 @@ func (cur *Cursor) Delete(flags PutFlags) Error {
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_del), ptr, 0)
 	return args.result
+}
+
+// DeleteIntegerRange deletes a range of records (key >= low && key <= high)
+func (cur *Cursor) DeleteIntegerRange(low, high, maxCount uint64) (first uint64, last uint64, count uint64, err Error) {
+	args := struct {
+		tx       uintptr
+		cursor   uintptr
+		low      uint64
+		high     uint64
+		maxCount uint64
+		count    uint64
+		first    uint64
+		last     uint64
+		dbi      uint32
+		result   Error
+	}{
+		tx:       0,
+		cursor:   uintptr(unsafe.Pointer(cur)),
+		low:      low,
+		high:     high,
+		maxCount: maxCount,
+	}
+	ptr := uintptr(unsafe.Pointer(&args))
+	unsafecgo.NonBlocking((*byte)(C.do_mdbx_del_integer_range), ptr, 0)
+	return args.first, args.last, args.count, args.result
 }
 
 // Count Return count of duplicates for current key.

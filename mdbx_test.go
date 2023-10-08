@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"strconv"
@@ -31,10 +32,18 @@ func TestIsReadAheadReasonable(t *testing.T) {
 	fmt.Println("IsReadAheadReasonable:", IsReadAheadReasonable(1024*1024*1024*4, 0))
 }
 
+func chkPrint(args ...string) {
+	_, out, err := Chk("-v", "-w", "testdata/db.dat")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(out))
+}
+
 func TestChk(t *testing.T) {
 	//defer os.Remove("testdata/db.dat")
 	//defer os.Remove("testdata/db.dat-lck")
-	TestEnv_Open(t)
+	TestOpen(t)
 	_, out, err := Chk("-v", "-w", "testdata/db.dat")
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +54,7 @@ func TestChk(t *testing.T) {
 func TestChkVersion(t *testing.T) {
 	defer os.Remove("testdata/db.dat")
 	defer os.Remove("testdata/db.dat-lck")
-	TestEnv_Open(t)
+	TestOpen(t)
 	_, out, err := Chk("-V")
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +65,7 @@ func TestChkVersion(t *testing.T) {
 func TestStat(t *testing.T) {
 	defer os.Remove("testdata/db.dat")
 	defer os.Remove("testdata/db.dat-lck")
-	TestEnv_Open(t)
+	TestOpen(t)
 	_, out, err := Stat("-w", "testdata/db.dat")
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +73,7 @@ func TestStat(t *testing.T) {
 	fmt.Println(string(out))
 }
 
-func TestEnv_Open(t *testing.T) {
+func TestOpen(t *testing.T) {
 	env, err := NewEnv()
 	if err != ErrSuccess {
 		t.Fatal(err)
@@ -75,7 +84,7 @@ func TestEnv_Open(t *testing.T) {
 		SizeUpper:       1024 * 1024 * 1024 * 16,
 		GrowthStep:      1024 * 1024 * 20,
 		ShrinkThreshold: 0,
-		PageSize:        65536,
+		PageSize:        4096,
 	}); err != ErrSuccess {
 		t.Fatal(err)
 	}
@@ -141,6 +150,221 @@ func TestEnv_Open(t *testing.T) {
 	}
 }
 
+func TestGC(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	env, err := NewEnv()
+	if err != ErrSuccess {
+		t.Fatal(err)
+	}
+	if err = env.SetGeometry(Geometry{
+		SizeLower:       1024 * 512,
+		SizeNow:         1024 * 512,
+		SizeUpper:       1024 * 1024 * 2,
+		GrowthStep:      1024 * 512,
+		ShrinkThreshold: 0,
+		PageSize:        4096,
+	}); err != ErrSuccess {
+		t.Fatal(err)
+	}
+	if err = env.SetMaxDBS(4); err != ErrSuccess {
+		t.Fatal(err)
+	}
+	if err = env.SetMaxReaders(64); err != ErrSuccess {
+		t.Fatal(err)
+	}
+	//os.Remove("testdata/db.dat")
+	//os.Remove("testdata/db.dat-lck")
+	os.MkdirAll("testdata", 0755)
+	err = env.Open(
+		"testdata/db.dat",
+		EnvNoTLS|EnvNoReadAhead|EnvCoalesce|EnvLIFOReclaim|EnvSyncDurable|EnvNoSubDir,
+		0664,
+	)
+	if err != ErrSuccess {
+		t.Fatal(err)
+	}
+
+	var tx Tx
+	if err = env.Begin(&tx, TxReadWrite); err != ErrSuccess {
+		t.Fatal(err)
+	}
+
+	if err = env.Warmup(&tx, WarmupOOMSafe, 0); err != ErrSuccess {
+		t.Fatal(err)
+	}
+
+	var (
+		dbi     DBI
+		dbiLogs DBI
+	)
+	if dbi, err = tx.OpenDBI("m", DBIntegerKey|DBCreate); err != ErrSuccess {
+		t.Fatal(err)
+	}
+	if dbiLogs, err = tx.OpenDBI("l", DBIntegerKey|DBCreate); err != ErrSuccess {
+		t.Fatal(err)
+	}
+
+	if err = tx.Commit(); err != ErrSuccess {
+		t.Fatal(err)
+	}
+
+	data := make([]byte, 32)
+	var id uint64 = 0
+
+	for i := 0; i < 5; i++ {
+		if err = env.Begin(&tx, TxReadWrite); err != ErrSuccess {
+			t.Fatal(err)
+		}
+
+		var (
+			key_ = uint64(1)
+			key  = U64(&key_)
+			val  = Bytes(&data)
+			old  Val
+		)
+
+		if err = tx.Replace(dbi, &key, &val, &old, 0); err != ErrSuccess {
+			t.Fatal(err)
+		}
+
+		var cursor *Cursor
+		cursor, err = tx.OpenCursor(dbiLogs)
+		if err != ErrSuccess {
+			t.Fatal(err)
+		}
+
+		if err = cursor.Get(&key, &val, CursorLast); err != ErrSuccess {
+			if err != ErrENODATA && err != ErrNotFound {
+				t.Fatal(err)
+			}
+		}
+
+		if err != ErrENODATA && err != ErrNotFound {
+			id = key.U64()
+		}
+
+		for x := 0; x < 50; x++ {
+			id++
+			key_ = id
+			key = U64(&key_)
+			if err = cursor.Put(&key, &val, PutAppend); err != ErrSuccess {
+				//if err = tx.Put(dbiLogs, &key, &val, PutAppend); err != ErrSuccess {
+				t.Fatal(err)
+			}
+		}
+
+		if err = cursor.Close(); err != ErrSuccess {
+			t.Fatal(err)
+		}
+
+		if err = tx.Commit(); err != ErrSuccess {
+			t.Fatal(err)
+		}
+
+		//chkPrint("-v", "-w", "testdata/db.dat")
+
+		if i >= 0 {
+			tx = Tx{}
+			if err = env.Begin(&tx, TxReadWrite); err != ErrSuccess {
+				t.Fatal(err)
+			}
+
+			first, last, count, err := tx.DeleteIntegerRange(dbiLogs, 0, math.MaxUint64, 100)
+			if err != ErrSuccess {
+				if err != ErrENODATA && err != ErrNotFound {
+					t.Fatal(err)
+				}
+				_ = tx.Abort()
+				goto NEXT
+			}
+
+			fmt.Println("Delete Range", "[", first, ",", last, "]  count:", count)
+
+			//if cursor, err = tx.OpenCursor(dbiLogs); err != ErrSuccess {
+			//	t.Fatal(err)
+			//}
+			//
+			//key_ = 0
+			//if err = cursor.Get(&key, &val, CursorFirst); err != ErrSuccess {
+			//	if err != ErrENODATA && err != ErrNotFound {
+			//		t.Fatal(err)
+			//	}
+			//	_ = cursor.Close()
+			//	_ = tx.Abort()
+			//	goto NEXT
+			//}
+			//
+			//fmt.Println(key.U64())
+			//key_ = key.U64()
+			//
+			//for x := 0; x < 100; x++ {
+			//	if err = cursor.Get(&key, &val, CursorGetCurrent); err != ErrSuccess {
+			//		if err != ErrENODATA && err != ErrNotFound {
+			//			t.Fatal(err)
+			//		}
+			//		break
+			//	}
+			//
+			//	//fmt.Println("delete key:", key.U64())
+			//	if err = cursor.Delete(PutCurrent); err != ErrSuccess {
+			//		if err == ErrENODATA || err == ErrNotFound {
+			//			break
+			//		}
+			//		t.Fatal(err)
+			//	}
+			//
+			//}
+			//
+			//if err = cursor.Close(); err != ErrSuccess {
+			//	t.Fatal(err)
+			//}
+
+			if err = tx.Commit(); err != ErrSuccess {
+				t.Fatal(err)
+			}
+		}
+
+	NEXT:
+		tx = Tx{}
+		if err = env.Begin(&tx, TxReadWrite); err != ErrSuccess {
+			t.Fatal(err)
+		}
+		if cursor, err = tx.OpenCursor(dbiLogs); err != ErrSuccess {
+			t.Fatal(err)
+		}
+		if err = cursor.Get(&key, &val, CursorLast); err != ErrSuccess {
+			if err != ErrENODATA && err != ErrNotFound {
+				t.Fatal(err)
+			}
+		}
+
+		if err != ErrENODATA && err != ErrNotFound {
+			id = key.U64()
+		}
+		for x := 0; x < 50; x++ {
+			id++
+			key_ = id
+			key = U64(&key_)
+			if err = cursor.Put(&key, &val, PutAppend); err != ErrSuccess {
+				//if err = tx.Put(dbiLogs, &key, &val, PutAppend); err != ErrSuccess {
+				t.Fatal(err)
+			}
+		}
+		if err = cursor.Close(); err != ErrSuccess {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(); err != ErrSuccess {
+			t.Fatal(err)
+		}
+	}
+
+	if err = env.Close(false); err != ErrSuccess {
+		fmt.Println(err)
+	}
+	chkPrint("-v", "-w", "testdata/db.dat")
+}
+
 type Engine struct {
 	env    *Env
 	rootDB DBI
@@ -160,6 +384,7 @@ func (engine *Engine) BeginRead() (*Tx, Error) {
 }
 
 func initDB(path string, flags EnvFlags) (*Engine, Error) {
+	_ = os.RemoveAll(path)
 	os.MkdirAll(path, 0755)
 	engine := &Engine{}
 	env, err := NewEnv()
@@ -580,7 +805,12 @@ func BenchmarkTxn_GetCursor(b *testing.B) {
 }
 
 func TestTxn_Cursor(b *testing.T) {
-	defer os.RemoveAll("testdata/db")
+	// defer func() {
+	// 	_ = Delete("testdata/db", DeleteModeJustDelete)
+	// 	os.RemoveAll("testdata/db")
+	// }()
+	_ = Delete("testdata/db", DeleteModeJustDelete)
+	os.RemoveAll("testdata/db")
 	iterations := 100
 	engine, err := initDB("testdata/db/"+strconv.Itoa(iterations), EnvSafeNoSync)
 	if err != ErrSuccess {
@@ -598,7 +828,7 @@ func TestTxn_Cursor(b *testing.T) {
 		b.Fatal(err)
 	}
 
-	for i := 0; i < iterations; i++ {
+	for i := 1; i <= iterations; i++ {
 		//binary.BigEndian.PutUint64(key, uint64(20))
 		//*(*uint64)(unsafe.Pointer(&key[0])) = uint64(i)
 		binary.LittleEndian.PutUint64(key, uint64(i))
@@ -638,7 +868,11 @@ func TestTxn_Cursor(b *testing.T) {
 
 	binary.LittleEndian.PutUint64(key, 0)
 
-	count := 0
+	if err = cursor.Get(&keyVal, &dataVal, CursorFirst); err != ErrSuccess {
+		b.Fatal(err)
+	}
+	println("first key", keyVal.U64())
+	count := 1
 	//
 	for {
 		if err = cursor.Get(&keyVal, &dataVal, CursorNextNoDup); err != ErrSuccess {

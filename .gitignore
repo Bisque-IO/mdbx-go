@@ -17,4 +17,6 @@
 .DS_Store
 .vscode
 testdata/
+sys/
 libmdbx/
+mdbx

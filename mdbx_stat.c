@@ -34,7 +34,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_BUILD_SOURCERY b4eb26e23341c97b6bd15a0a0b14e027958f0d7f9bb690af0c56b2ecbe600ab0_v0_12_7_48_g3d187abc
+#define MDBX_BUILD_SOURCERY be4886e0b2530af39ab4092f80058315616d38bdebb393bda56731b2dfef990a_v0_12_7_12_g1aead686_dirty
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -43,8 +43,6 @@
 #ifdef xMDBX_TOOLS
 #define MDBX_DEPRECATED
 #endif /* xMDBX_TOOLS */
-
-//#define xMDBX_ALLOY 1
 
 #ifdef xMDBX_ALLOY
 /* Amalgamated build */
@@ -2060,7 +2058,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 
 /** Controls profiling of GC search and updates. */
 #ifndef MDBX_ENABLE_PROFGC
-#define MDBX_ENABLE_PROFGC 0
+#define MDBX_ENABLE_PROFGC 1
 #elif !(MDBX_ENABLE_PROFGC == 0 || MDBX_ENABLE_PROFGC == 1)
 #error MDBX_ENABLE_PROFGC must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PROFGC */
@@ -2089,7 +2087,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
  * to avoid use sequences of pages. */
 #ifndef MDBX_ENABLE_BIGFOOT
 #if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
-#define MDBX_ENABLE_BIGFOOT 1
+#define MDBX_ENABLE_BIGFOOT 0
 #else
 #define MDBX_ENABLE_BIGFOOT 0
 #endif
@@ -3758,6 +3756,7 @@ struct MDBX_env {
   int me_valgrind_handle;
 #endif
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+  MDBX_atomic_uint32_t me_ignore_EDEADLK;
   pgno_t me_poison_edge;
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
@@ -4106,9 +4105,9 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 #define EOF (-1)
 #endif
 
-int optind = 1;
-int optopt;
-char *optarg;
+static int optind = 1;
+static int optopt;
+static char *optarg;
 
 int getopt(int argc, char *const argv[], const char *opts) {
   static int sp = 1;

@@ -1,0 +1,47 @@
+There are THREE potentially winning but counter-productive tactics:
+    
+1. Try to use pages with the lowest numbers. So exchange with
+the disk will be more heapy, and pages closer to the end of the database will have more chances
+fall under auto-compactification. Partially this tactic has already been implemented, but
+for its effectiveness, it is necessary to explicitly prioritize the selection of pages:
+- support for relist, for near and far pages;
+- use pages from the distant list if the first one is empty,
+and the second one is too big, or with an empty GC.
+
+2. Try to highlight pages sequentially. So written to disk
+regions will be linear, which fundamentally speeds up recording to the HDD.
+At the same time, on average this will not affect reading, more precisely, if
+reading order does not match the change order (in other words, if
+reading does not correlate with updates and/or insertions) it will not affect, otherwise
+may speed up. However, the sequences are on average quite rare.
+Therefore, for efficiency it is required to accumulate and maintain in RAM
+huge lists of pages and then save them back to the database. Current format
+A database (without bitmaps) is extremely unsuitable for this. Therefore this tactic is not
+has a chance to be successful without changing the database format (Mithril).
+
+3. Try to save sequences of pages. This allows you to avoid
+unnecessary reading/searching in GC with more or less permanent placement and/or
+updating data that requires more than one page. The problem is that without
+information from the application the library cannot know how much
+sequences will be in demand in the near future, and
+saving sequences “just in case” is not only expensive
+on its own, but also works to its detriment.
+
+That's why:
+- TODO adds a division of relist into “near” and “far” pages,
+followed by the implementation of the first tactics;
+- preferential use of sequences is sent
+in MithrilDB as part of the "HDD frendly" feature;
+- savings implemented in 3757eb72f7c6b46862f8f17881ac88e8cecc1979
+sequences are disabled via MDBX_ENABLE_SAVING_SEQUENCES=0.
+
+As an alternative to unconditional sequence "saving",
+in future versions of libmdbx it will probably be offered
+API for interacting with GC:
+- getting GC size, including histograms of sequence sizes
+and proximity to the end of the database;
+- enable the formation of “linear stock” for later use
+within the current transaction;
+- intentional loading of GC into memory for coagulation and “straightening”;
+- intentional copying of data from pages at the end of the database for later
+from liberation, i.e. controlled compactification on request.

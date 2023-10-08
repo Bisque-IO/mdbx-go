@@ -228,7 +228,7 @@ func TestGC(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		var cursor *Cursor
+		var cursor Cursor
 		cursor, err = tx.OpenCursor(dbiLogs)
 		if err != ErrSuccess {
 			t.Fatal(err)
@@ -373,13 +373,11 @@ type Engine struct {
 }
 
 func (engine *Engine) BeginWrite() (*Tx, Error) {
-	engine.write.txn = nil
-	engine.write.env = engine.env
+	engine.write.ptr = nil
 	return &engine.write, engine.env.Begin(&engine.write, TxReadWrite)
 }
 
 func (engine *Engine) BeginRead() (*Tx, Error) {
-	engine.rd.env = engine.env
 	return &engine.rd, engine.rd.Renew()
 }
 

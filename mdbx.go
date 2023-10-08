@@ -589,8 +589,6 @@ void do_mdbx_del_integer_range(size_t arg0, size_t arg1) {
 	uint64_t high = (uint64_t)args->high;
 	key.iov_base = (void*)&key_value;
 	key.iov_len = 8;
-	uint64_t count = 0;
-	uint64_t max_count = args->max_count;
 
 	MDBX_error_t err;
 
@@ -613,6 +611,8 @@ void do_mdbx_del_integer_range(size_t arg0, size_t arg1) {
 		return;
 	}
 
+	args->last = current;
+
 	do {
 		err = mdbx_cursor_del(
 			cursor,
@@ -621,18 +621,15 @@ void do_mdbx_del_integer_range(size_t arg0, size_t arg1) {
 
 		if (err != MDBX_SUCCESS) {
 			args->result = (int32_t)err;
-			args->count = count;
-			args->last = current;
 			if (cursor_created) {
 				mdbx_cursor_close(cursor);
 			}
 			return;
 		}
 
-		count++;
-		if (count >= max_count) {
-			args->count = count;
-			args->last = current;
+		args->last = current;
+		args->count++;
+		if (args->count >= args->max_count) {
 			if (cursor_created) {
 				mdbx_cursor_close(cursor);
 			}
@@ -642,8 +639,6 @@ void do_mdbx_del_integer_range(size_t arg0, size_t arg1) {
 		err = mdbx_cursor_get(cursor, &key, &val, MDBX_GET_CURRENT);
 		if (err != MDBX_SUCCESS) {
 			args->result = (int32_t)err;
-			args->count = count;
-			args->last = current;
 			if (cursor_created) {
 				mdbx_cursor_close(cursor);
 			}
@@ -4009,7 +4004,7 @@ func (env *Env) Warmup(tx *Tx, flags WarmupFlags, timeoutSeconds16dot16 uint32) 
 	return Error(
 		C.mdbx_env_warmup(
 			env.env,
-			tx.txn,
+			tx.ptr,
 			C.MDBX_warmup_flags_t(flags),
 			C.unsigned(timeoutSeconds16dot16),
 		))
@@ -4246,39 +4241,34 @@ func (v *Val) F64() float64 {
 //////////////////////////////////////////////////////////////////////////////////////////
 
 type Tx struct {
-	env       *Env
-	txn       *C.MDBX_txn
-	shared    bool
-	reset     bool
-	aborted   bool
-	committed bool
+	ptr *C.MDBX_txn
 }
 
-func NewTransaction(env *Env) *Tx {
-	txn := &Tx{}
-	txn.env = env
-	txn.shared = true
-	return txn
+func (tx *Tx) IsNil() bool {
+	return tx.ptr == nil
 }
 
-func (tx *Tx) IsReset() bool {
-	return tx.reset
-}
+//func NewTransaction(env *Env) *Tx {
+//	txn := &Tx{}
+//	txn.env = env
+//	txn.shared = true
+//	return txn
+//}
 
-func (tx *Tx) IsAborted() bool {
-	return tx.aborted
-}
-
-func (tx *Tx) IsCommitted() bool {
-	return tx.committed
-}
+//func (tx *Tx) IsReset() bool {
+//	return tx.reset
+//}
+//
+//func (tx *Tx) IsAborted() bool {
+//	return tx.aborted
+//}
+//
+//func (tx *Tx) IsCommitted() bool {
+//	return tx.committed
+//}
 
 func (env *Env) Begin(txn *Tx, flags TxFlags) Error {
-	txn.env = env
-	txn.txn = nil
-	txn.reset = false
-	txn.aborted = false
-	txn.committed = false
+	txn.ptr = nil
 	args := struct {
 		env     uintptr
 		parent  uintptr
@@ -4289,7 +4279,7 @@ func (env *Env) Begin(txn *Tx, flags TxFlags) Error {
 	}{
 		env:    uintptr(unsafe.Pointer(env.env)),
 		parent: 0,
-		txn:    uintptr(unsafe.Pointer(&txn.txn)),
+		txn:    uintptr(unsafe.Pointer(&txn.ptr)),
 		flags:  flags,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -4366,7 +4356,7 @@ func (tx *Tx) Info(info *TxInfo) Error {
 		scanRlt int32
 		result  Error
 	}{
-		txn:  uintptr(unsafe.Pointer(tx.txn)),
+		txn:  uintptr(unsafe.Pointer(tx.ptr)),
 		info: uintptr(unsafe.Pointer(info)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -4389,7 +4379,7 @@ func (tx *Tx) Flags() int32 {
 		txn   uintptr
 		flags int32
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_flags), ptr, 0)
@@ -4413,7 +4403,7 @@ func (tx *Tx) ID() uint64 {
 		txn uintptr
 		id  uint64
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_id), ptr, 0)
@@ -4453,7 +4443,7 @@ func (tx *Tx) CommitEx(latency *CommitLatency) Error {
 		latency uintptr
 		result  Error
 	}{
-		txn:     uintptr(unsafe.Pointer(tx.txn)),
+		txn:     uintptr(unsafe.Pointer(tx.ptr)),
 		latency: uintptr(unsafe.Pointer(latency)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -4509,7 +4499,6 @@ func (tx *Tx) CommitEx(latency *CommitLatency) Error {
 // \retval MDBX_EIO              A system-level I/O error occurred.
 // \retval MDBX_ENOMEM           Out of memory.
 func (tx *Tx) Commit() Error {
-	tx.committed = true
 	return tx.CommitEx(nil)
 }
 
@@ -4559,9 +4548,8 @@ func (tx *Tx) Abort() Error {
 		txn    uintptr
 		result Error
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
-	tx.aborted = true
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_abort), ptr, 0)
 	return args.result
@@ -4583,7 +4571,7 @@ func (tx *Tx) Break() Error {
 		txn    uintptr
 		result Error
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_break), ptr, 0)
@@ -4635,9 +4623,8 @@ func (tx *Tx) Reset() Error {
 		txn    uintptr
 		result Error
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
-	tx.reset = true
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_reset), ptr, 0)
 	return args.result
@@ -4676,9 +4663,8 @@ func (tx *Tx) Renew() Error {
 		txn    uintptr
 		result Error
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
-	tx.reset = false
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_renew), ptr, 0)
 	return args.result
@@ -4713,7 +4699,7 @@ func (tx *Tx) PutCanary(canary *Canary) Error {
 		canary uintptr
 		result Error
 	}{
-		txn:    uintptr(unsafe.Pointer(tx.txn)),
+		txn:    uintptr(unsafe.Pointer(tx.ptr)),
 		canary: uintptr(unsafe.Pointer(canary)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -4738,7 +4724,7 @@ func (tx *Tx) GetCanary(canary *Canary) Error {
 		canary uintptr
 		result Error
 	}{
-		txn:    uintptr(unsafe.Pointer(tx.txn)),
+		txn:    uintptr(unsafe.Pointer(tx.ptr)),
 		canary: uintptr(unsafe.Pointer(canary)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -4767,7 +4753,7 @@ func (tx *Tx) GetCanary(canary *Canary) Error {
 // \param [in] bytes   The size of \ref MDBX_envinfo.
 //
 // \returns A non-zero error value on failure and 0 on success.
-func (tx *Tx) EnvInfo(info *EnvInfo) Error {
+func (tx *Tx) EnvInfo(env *Env, info *EnvInfo) Error {
 	if info == nil {
 		return ErrInvalid
 	}
@@ -4778,8 +4764,8 @@ func (tx *Tx) EnvInfo(info *EnvInfo) Error {
 		size   uintptr
 		result int32
 	}{
-		env:  uintptr(unsafe.Pointer(tx.env.env)),
-		txn:  uintptr(unsafe.Pointer(tx.txn)),
+		env:  uintptr(unsafe.Pointer(env.env)),
+		txn:  uintptr(unsafe.Pointer(tx.ptr)),
 		info: uintptr(unsafe.Pointer(info)),
 		size: unsafe.Sizeof(C.MDBX_envinfo{}),
 	}
@@ -4891,13 +4877,13 @@ func (tx *Tx) EnvInfo(info *EnvInfo) Error {
 func (tx *Tx) OpenDBI(name string, flags DBFlags) (DBI, Error) {
 	if len(name) == 0 {
 		var dbi DBI
-		err := Error(C.mdbx_dbi_open(tx.txn, nil, (C.MDBX_db_flags_t)(flags), (*C.MDBX_dbi)(unsafe.Pointer(&dbi))))
+		err := Error(C.mdbx_dbi_open(tx.ptr, nil, (C.MDBX_db_flags_t)(flags), (*C.MDBX_dbi)(unsafe.Pointer(&dbi))))
 		return dbi, err
 	} else {
 		n := C.CString(name)
 		defer C.free(unsafe.Pointer(n))
 		var dbi DBI
-		err := Error(C.mdbx_dbi_open(tx.txn, n, (C.MDBX_db_flags_t)(flags), (*C.MDBX_dbi)(unsafe.Pointer(&dbi))))
+		err := Error(C.mdbx_dbi_open(tx.ptr, n, (C.MDBX_db_flags_t)(flags), (*C.MDBX_dbi)(unsafe.Pointer(&dbi))))
 		return dbi, err
 	}
 }
@@ -4974,7 +4960,7 @@ func (tx *Tx) DBIStat(dbi DBI, stat *Stats) Error {
 		dbi    uint32
 		result Error
 	}{
-		txn:  uintptr(unsafe.Pointer(tx.txn)),
+		txn:  uintptr(unsafe.Pointer(tx.ptr)),
 		stat: uintptr(unsafe.Pointer(stat)),
 		size: unsafe.Sizeof(Stats{}),
 		dbi:  uint32(dbi),
@@ -5004,7 +4990,7 @@ func (tx *Tx) DBIFlags(dbi DBI) (DBFlags, DBIState, Error) {
 		dbi    uint32
 		result Error
 	}{
-		txn:   uintptr(unsafe.Pointer(tx.txn)),
+		txn:   uintptr(unsafe.Pointer(tx.ptr)),
 		flags: uintptr(unsafe.Pointer(&flags)),
 		state: uintptr(unsafe.Pointer(&state)),
 		dbi:   uint32(dbi),
@@ -5033,7 +5019,7 @@ func (tx *Tx) Drop(dbi DBI, del bool) Error {
 		dbi    uint32
 		result Error
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 		dbi: uint32(dbi),
 	}
 	if del {
@@ -5085,7 +5071,7 @@ func (tx *Tx) Get(dbi DBI, key *Val, data *Val) Error {
 		dbi    uint32
 		result Error
 	}{
-		txn:  uintptr(unsafe.Pointer(tx.txn)),
+		txn:  uintptr(unsafe.Pointer(tx.ptr)),
 		key:  uintptr(unsafe.Pointer(key)),
 		data: uintptr(unsafe.Pointer(data)),
 		dbi:  uint32(dbi),
@@ -5137,7 +5123,7 @@ func (tx *Tx) GetEqualOrGreat(dbi DBI, key *Val, data *Val) Error {
 		dbi    uint32
 		result Error
 	}{
-		txn:  uintptr(unsafe.Pointer(tx.txn)),
+		txn:  uintptr(unsafe.Pointer(tx.ptr)),
 		key:  uintptr(unsafe.Pointer(key)),
 		data: uintptr(unsafe.Pointer(data)),
 		dbi:  uint32(dbi),
@@ -5194,7 +5180,7 @@ func (tx *Tx) GetEx(dbi DBI, key *Val, data *Val) (int, Error) {
 		dbi         uint32
 		result      Error
 	}{
-		txn:         uintptr(unsafe.Pointer(tx.txn)),
+		txn:         uintptr(unsafe.Pointer(tx.ptr)),
 		key:         uintptr(unsafe.Pointer(key)),
 		data:        uintptr(unsafe.Pointer(data)),
 		valuesCount: uintptr(unsafe.Pointer(&valuesCount)),
@@ -5304,7 +5290,7 @@ func (tx *Tx) Put(dbi DBI, key *Val, data *Val, flags PutFlags) Error {
 		flags  uint32
 		result Error
 	}{
-		txn:   uintptr(unsafe.Pointer(tx.txn)),
+		txn:   uintptr(unsafe.Pointer(tx.ptr)),
 		key:   uintptr(unsafe.Pointer(key)),
 		data:  uintptr(unsafe.Pointer(data)),
 		dbi:   uint32(dbi),
@@ -5381,7 +5367,7 @@ func (tx *Tx) Replace(
 		flags   uint32
 		result  Error
 	}{
-		txn:     uintptr(unsafe.Pointer(tx.txn)),
+		txn:     uintptr(unsafe.Pointer(tx.ptr)),
 		key:     uintptr(unsafe.Pointer(key)),
 		data:    uintptr(unsafe.Pointer(data)),
 		oldData: uintptr(unsafe.Pointer(oldData)),
@@ -5430,7 +5416,7 @@ func (tx *Tx) Delete(dbi DBI, key *Val, data *Val) Error {
 		dbi    uint32
 		result Error
 	}{
-		txn:  uintptr(unsafe.Pointer(tx.txn)),
+		txn:  uintptr(unsafe.Pointer(tx.ptr)),
 		key:  uintptr(unsafe.Pointer(key)),
 		data: uintptr(unsafe.Pointer(data)),
 		dbi:  uint32(dbi),
@@ -5454,7 +5440,7 @@ func (tx *Tx) DeleteIntegerRange(dbi DBI, low, high, maxCount uint64) (first uin
 		dbi      uint32
 		result   Error
 	}{
-		tx:       uintptr(unsafe.Pointer(tx.txn)),
+		tx:       uintptr(unsafe.Pointer(tx.ptr)),
 		cursor:   0, // Cursor will be created internally
 		low:      low,
 		high:     high,
@@ -5507,7 +5493,7 @@ func (tx *Tx) IsDirty(ptr uintptr) Error {
 		ptr    uintptr
 		result int64
 	}{
-		txn: uintptr(unsafe.Pointer(tx.txn)),
+		txn: uintptr(unsafe.Pointer(tx.ptr)),
 		ptr: ptr,
 	}
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_is_dirty), uintptr(unsafe.Pointer(&args)), 0)
@@ -5551,7 +5537,7 @@ func (tx *Tx) DBISequence(dbi DBI, increment uint64) (result uint64, err Error) 
 		increment uint64
 		outcome   int64
 	}{
-		txn:       uintptr(unsafe.Pointer(tx.txn)),
+		txn:       uintptr(unsafe.Pointer(tx.ptr)),
 		dbi:       uintptr(dbi),
 		increment: increment,
 	}
@@ -5563,7 +5549,9 @@ func (tx *Tx) DBISequence(dbi DBI, increment uint64) (result uint64, err Error) 
 // Cursor
 //////////////////////////////////////////////////////////////////////////////////////////
 
-type Cursor C.MDBX_cursor
+type Cursor struct {
+	ptr *C.MDBX_cursor
+}
 
 // NewCursor Create a cursor handle but not bind it to transaction nor DBI handle.
 // \ingroup c_cursors
@@ -5590,14 +5578,14 @@ type Cursor C.MDBX_cursor
 //	\ref mdbx_cursor_get_userctx() until cursor closed.
 //
 // \returns Created cursor handle or NULL in case out of memory.
-func NewCursor() *Cursor {
+func NewCursor() Cursor {
 	args := struct {
 		context uintptr
-		cursor  uintptr
+		cursor  *C.MDBX_cursor
 	}{}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_create), ptr, 0)
-	return (*Cursor)(unsafe.Pointer(args.cursor))
+	return Cursor{ptr: args.cursor}
 }
 
 // Bind cursor to specified transaction and DBI handle.
@@ -5637,8 +5625,8 @@ func (tx *Tx) Bind(cursor *Cursor, dbi DBI) Error {
 		dbi    DBI
 		result Error
 	}{
-		txn:    uintptr(unsafe.Pointer(tx.txn)),
-		cursor: uintptr(unsafe.Pointer(cursor)),
+		txn:    uintptr(unsafe.Pointer(tx.ptr)),
+		cursor: uintptr(unsafe.Pointer(cursor.ptr)),
 		dbi:    dbi,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -5683,7 +5671,7 @@ func (tx *Tx) Bind(cursor *Cursor, dbi DBI) Error {
 //	by current thread.
 //
 // \retval MDBX_EINVAL  An invalid parameter was specified.
-func (tx *Tx) OpenCursor(dbi DBI) (*Cursor, Error) {
+func (tx *Tx) OpenCursor(dbi DBI) (Cursor, Error) {
 	var cursor *C.MDBX_cursor
 	args := struct {
 		txn    uintptr
@@ -5691,13 +5679,13 @@ func (tx *Tx) OpenCursor(dbi DBI) (*Cursor, Error) {
 		dbi    DBI
 		result Error
 	}{
-		txn:    uintptr(unsafe.Pointer(tx.txn)),
+		txn:    uintptr(unsafe.Pointer(tx.ptr)),
 		cursor: uintptr(unsafe.Pointer(&cursor)),
 		dbi:    dbi,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_open), ptr, 0)
-	return (*Cursor)(unsafe.Pointer(cursor)), args.result
+	return Cursor{ptr: cursor}, args.result
 }
 
 // Close a cursor handle.
@@ -5716,8 +5704,12 @@ func (tx *Tx) OpenCursor(dbi DBI) (*Cursor, Error) {
 //
 //	or \ref mdbx_cursor_create().
 func (cur *Cursor) Close() Error {
-	ptr := uintptr(unsafe.Pointer(cur))
+	if cur.ptr == nil {
+		return ErrSuccess
+	}
+	ptr := uintptr(unsafe.Pointer(cur.ptr))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_close), ptr, 0)
+	cur.ptr = nil
 	return ErrSuccess
 }
 
@@ -5755,8 +5747,8 @@ func (cur *Cursor) Renew(tx *Tx) Error {
 		cursor uintptr
 		result Error
 	}{
-		txn:    uintptr(unsafe.Pointer(tx.txn)),
-		cursor: uintptr(unsafe.Pointer(cur)),
+		txn:    uintptr(unsafe.Pointer(tx.ptr)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_renew), ptr, 0)
@@ -5767,16 +5759,16 @@ func (cur *Cursor) Renew(tx *Tx) Error {
 // \ingroup c_cursors
 //
 // \param [in] cursor A cursor handle returned by \ref mdbx_cursor_open().
-func (cur *Cursor) Tx() *C.MDBX_txn {
+func (cur *Cursor) Tx() Tx {
 	args := struct {
 		cursor uintptr
 		txn    uintptr
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_txn), ptr, 0)
-	return (*C.MDBX_txn)(unsafe.Pointer(args.txn))
+	return Tx{ptr: (*C.MDBX_txn)(unsafe.Pointer(args.txn))}
 }
 
 // DBI Return the cursor's database handle.
@@ -5788,7 +5780,7 @@ func (cur *Cursor) DBI() DBI {
 		cursor uintptr
 		dbi    DBI
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_dbi), ptr, 0)
@@ -5811,8 +5803,8 @@ func (cur *Cursor) Copy(dest *Cursor) Error {
 		dest   uintptr
 		result Error
 	}{
-		src:  uintptr(unsafe.Pointer(cur)),
-		dest: uintptr(unsafe.Pointer(dest)),
+		src:  uintptr(unsafe.Pointer(cur.ptr)),
+		dest: uintptr(unsafe.Pointer(dest.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_copy), ptr, 0)
@@ -5852,7 +5844,7 @@ func (cur *Cursor) Get(key *Val, data *Val, op CursorOp) Error {
 		op     CursorOp
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 		key:    uintptr(unsafe.Pointer(key)),
 		data:   uintptr(unsafe.Pointer(data)),
 		op:     op,
@@ -5915,7 +5907,7 @@ func (cur *Cursor) GetBatch(data []Val, op CursorOp) ([]Val, Error) {
 		op     CursorOp
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 		pairs:  uintptr(unsafe.Pointer(&data[0])),
 		limit:  uintptr(len(data)),
 		op:     op,
@@ -6024,7 +6016,7 @@ func (cur *Cursor) Put(key *Val, data *Val, flags PutFlags) Error {
 		flags  PutFlags
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 		key:    uintptr(unsafe.Pointer(key)),
 		data:   uintptr(unsafe.Pointer(data)),
 		flags:  flags,
@@ -6078,7 +6070,7 @@ func (cur *Cursor) Delete(flags PutFlags) Error {
 		flags  PutFlags
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 		flags:  flags,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -6101,7 +6093,7 @@ func (cur *Cursor) DeleteIntegerRange(low, high, maxCount uint64) (first uint64,
 		result   Error
 	}{
 		tx:       0,
-		cursor:   uintptr(unsafe.Pointer(cur)),
+		cursor:   uintptr(unsafe.Pointer(cur.ptr)),
 		low:      low,
 		high:     high,
 		maxCount: maxCount,
@@ -6138,7 +6130,7 @@ func (cur *Cursor) Count() (int, Error) {
 		count  uintptr
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 		count:  uintptr(unsafe.Pointer(&count)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
@@ -6167,7 +6159,7 @@ func (cur *Cursor) EOF() Error {
 		cursor uintptr
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_eof), ptr, 0)
@@ -6191,7 +6183,7 @@ func (cur *Cursor) OnFirst() Error {
 		cursor uintptr
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_on_first), ptr, 0)
@@ -6215,7 +6207,7 @@ func (cur *Cursor) OnLast() Error {
 		cursor uintptr
 		result Error
 	}{
-		cursor: uintptr(unsafe.Pointer(cur)),
+		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
 	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_on_last), ptr, 0)
@@ -6275,8 +6267,8 @@ func EstimateDistance(first, last *Cursor) (int64, Error) {
 		distance uintptr
 		result   Error
 	}{
-		first:    uintptr(unsafe.Pointer(first)),
-		last:     uintptr(unsafe.Pointer(last)),
+		first:    uintptr(unsafe.Pointer(first.ptr)),
+		last:     uintptr(unsafe.Pointer(last.ptr)),
 		distance: uintptr(unsafe.Pointer(&distance)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))

@@ -16,7 +16,7 @@ import (
 
 /*
 //#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DMDBX_DEBUG=0 -DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1 -std=gnu11 -fvisibility=hidden -ffast-math  -fPIC -pthread -Wno-error=attributes -W -Wall -Werror -Wextra -Wpedantic -Wno-deprecated-declarations -Wno-format -Wno-implicit-fallthrough -Wno-unused-parameter -Wno-format-extra-args -Wno-missing-field-initializers
-#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_PNL_ASCENDING=1 -DMDBX_ENABLE_BIGFOOT=1 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
+#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_PNL_ASCENDING=1 -DMDBX_ENABLE_BIGFOOT=1 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=0 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
 #cgo linux LDFLAGS: -lrt
 
 #include <stdlib.h>

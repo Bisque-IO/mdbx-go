@@ -178,7 +178,7 @@ func TestGC(t *testing.T) {
 	os.MkdirAll("testdata", 0755)
 	err = env.Open(
 		"testdata/db.dat",
-		EnvNoTLS|EnvNoReadAhead|EnvCoalesce|EnvLIFOReclaim|EnvSyncDurable|EnvNoSubDir,
+		EnvNoTLS|EnvNoReadAhead|EnvCoalesce|EnvLIFOReclaim|EnvWriteMap|EnvSyncDurable|EnvNoSubDir,
 		0664,
 	)
 	if err != ErrSuccess {
@@ -212,7 +212,7 @@ func TestGC(t *testing.T) {
 	data := make([]byte, 32)
 	var id uint64 = 0
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 5000; i++ {
 		if err = env.Begin(&tx, TxReadWrite); err != ErrSuccess {
 			t.Fatal(err)
 		}

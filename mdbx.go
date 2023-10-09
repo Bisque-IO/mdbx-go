@@ -646,7 +646,7 @@ void do_mdbx_del_integer_range(size_t arg0, size_t arg1) {
 		}
 
 		current = *((uint64_t*)key.iov_base);
-	} while (current < high);
+	} while (current <= high);
 }
 
 typedef struct mdbx_cursor_count_t {

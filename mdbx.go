@@ -1,6 +1,5 @@
 package mdbx
 
-import "C"
 import (
 	"os"
 	"reflect"
@@ -1083,6 +1082,116 @@ func DumpMain(args ...string) {
 	}()
 
 	os.Exit(int(C.mdbx_dump((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
+}
+
+// Drop invokes the embedded mdbx_drop utility.
+//
+// mdbx_drop %s [-V] [-q] [-d] [-s name] dbpath
+//
+//	-V print version and exit"
+//	-q be quiet"
+//	-d delete the specified database, don't just empty it"
+//	-s name\tdrop the specified named subDB"
+//	   by default empty the main DB
+func Drop(args ...string) (result int32, output []byte, err error) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_drop")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+	output, err = capture.CaptureWithCGo(func() {
+		result = int32(C.mdbx_drop_util((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
+	})
+	return
+}
+
+// DropMain invokes the embedded mdbx_drop utility and exits the program.
+//
+// mdbx_drop %s [-V] [-q] [-d] [-s name] dbpath
+//
+//	-V print version and exit"
+//	-q be quiet"
+//	-d delete the specified database, don't just empty it"
+//	-s name\tdrop the specified named subDB"
+//	   by default empty the main DB
+func DropMain(args ...string) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_drop_util")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+
+	os.Exit(int(C.mdbx_drop_util((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
+}
+
+// Load invokes the embedded mdbx_load utility.
+//
+// mdbx load %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath
+//
+//	-V        print version and exit
+//	-q        be quiet
+//	-a        append records in input order (required for custom comparators)
+//	-f file   read from file instead of stdin
+//	-s name   load into specified named subDB
+//	-N        don't overwrite existing records when loading, just skip ones
+//	-p        purge subDB before loading
+//	-T        read plaintext
+//	-r        rescue mode (ignore errors to load corrupted DB dump)
+//	-n        don't use subdirectory for newly created database (MDBX_NOSUBDIR)
+func Load(args ...string) (result int32, output []byte, err error) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_load")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+	output, err = capture.CaptureWithCGo(func() {
+		result = int32(C.mdbx_load((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
+	})
+	return
+}
+
+// LoadMain invokes the embedded mdbx_load utility and exits the program.
+//
+// mdbx load %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath
+//
+//	-V        print version and exit
+//	-q        be quiet
+//	-a        append records in input order (required for custom comparators)
+//	-f file   read from file instead of stdin
+//	-s name   load into specified named subDB
+//	-N        don't overwrite existing records when loading, just skip ones
+//	-p        purge subDB before loading
+//	-T        read plaintext
+//	-r        rescue mode (ignore errors to load corrupted DB dump)
+//	-n        don't use subdirectory for newly created database (MDBX_NOSUBDIR)
+func LoadMain(args ...string) {
+	argv := make([]*C.char, len(args)+1)
+	argv[0] = C.CString("mdbx_load")
+	for i, arg := range args {
+		argv[i+1] = C.CString(arg)
+	}
+	defer func() {
+		for _, arg := range argv {
+			C.free(unsafe.Pointer(arg))
+		}
+	}()
+
+	os.Exit(int(C.mdbx_load((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
 }
 
 type LogLevel int32

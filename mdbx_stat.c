@@ -34,7 +34,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_BUILD_SOURCERY be4886e0b2530af39ab4092f80058315616d38bdebb393bda56731b2dfef990a_v0_12_7_12_g1aead686_dirty
+#define MDBX_BUILD_SOURCERY e89efc7cad8ad00694aa79df1189866eccb26abdbb9e8e9a1fb85934b91bcf8a_v0_12_8_0_g02c7cf2a_dirty
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -2087,7 +2087,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
  * to avoid use sequences of pages. */
 #ifndef MDBX_ENABLE_BIGFOOT
 #if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
-#define MDBX_ENABLE_BIGFOOT 0
+#define MDBX_ENABLE_BIGFOOT 1
 #else
 #define MDBX_ENABLE_BIGFOOT 0
 #endif

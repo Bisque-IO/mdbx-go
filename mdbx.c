@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define xMDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY be4886e0b2530af39ab4092f80058315616d38bdebb393bda56731b2dfef990a_v0_12_7_12_g1aead686_dirty
+#define MDBX_BUILD_SOURCERY e89efc7cad8ad00694aa79df1189866eccb26abdbb9e8e9a1fb85934b91bcf8a_v0_12_8_0_g02c7cf2a_dirty
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -2065,7 +2065,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
  * to avoid use sequences of pages. */
 #ifndef MDBX_ENABLE_BIGFOOT
 #if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
-#define MDBX_ENABLE_BIGFOOT 0
+#define MDBX_ENABLE_BIGFOOT 1
 #else
 #define MDBX_ENABLE_BIGFOOT 0
 #endif
@@ -2124,7 +2124,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
  * \warning The database format depend on this option and libmdbx built with
  * different option value are incompatible. */
 #ifndef MDBX_PNL_ASCENDING
-#define MDBX_PNL_ASCENDING 1
+#define MDBX_PNL_ASCENDING 0
 #elif !(MDBX_PNL_ASCENDING == 0 || MDBX_PNL_ASCENDING == 1)
 #error MDBX_PNL_ASCENDING must be defined as 0 or 1
 #endif /* MDBX_PNL_ASCENDING */
@@ -7671,18 +7671,15 @@ const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
     char *const detent = buf + bufsize - 2;
     char *ptr = buf;
     *ptr++ = '<';
-    for (size_t i = 0; i < key->iov_len; i++) {
-      const ptrdiff_t left = detent - ptr;
-      assert(left > 0);
-      int len = snprintf(ptr, left, "%02x", data[i]);
-      if (len < 0 || len >= left)
-        break;
-      ptr += len;
+    for (size_t i = 0; i < key->iov_len && ptr < detent; i++) {
+      const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                            '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+      *ptr++ = hex[data[i] >> 4];
+      *ptr++ = hex[data[i] & 15];
     }
-    if (ptr < detent) {
-      ptr[0] = '>';
-      ptr[1] = '\0';
-    }
+    if (ptr < detent)
+      *ptr++ = '>';
+    *ptr = '\0';
   }
   return buf;
 }
@@ -13236,7 +13233,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 
   rc = txn_renew(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
-    txn->mt_owner = osal_thread_self();
+    tASSERT(txn, txn->mt_owner == osal_thread_self());
     DEBUG("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
           "/%" PRIaPGNO,
           txn->mt_txnid, (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w',
@@ -14297,6 +14294,14 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
 }
 
 static __inline void gcu_clean_reserved(MDBX_env *env, MDBX_val pnl) {
+#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+  /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
+   * вызванное через макрос DVAL_DEBUG() на выходе
+   * из cursor_set(MDBX_SET_KEY), которая вызывается ниже внутри update_gc() в
+   * цикле очистки и цикле заполнения зарезервированных элементов. */
+  memset(pnl.iov_base, 0xBB, pnl.iov_len);
+#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+
   /* PNL is initially empty, zero out at least the length */
   memset(pnl.iov_base, 0, sizeof(pgno_t));
   if ((env->me_flags & (MDBX_WRITEMAP | MDBX_NOMEMINIT)) == 0)
@@ -14612,6 +14617,15 @@ retry:
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
 
+#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+          /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
+           * вызванное через макрос DVAL_DEBUG() на выходе
+           * из cursor_set(MDBX_SET_KEY), которая вызывается как выше в цикле
+           * очистки, так и ниже в цикле заполнения зарезервированных элементов.
+           */
+          memset(data.iov_base, 0xBB, data.iov_len);
+#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+
           if (retired_pages_before == MDBX_PNL_GETSIZE(txn->tw.retired_pages)) {
             const size_t at = (ctx->lifo == MDBX_PNL_ASCENDING)
                                   ? left - chunk
@@ -14649,6 +14663,16 @@ retry:
         rc = cursor_put_nochecklen(&ctx->cursor, &key, &data, MDBX_RESERVE);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
+
+#if MDBX_DEBUG && (defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__))
+        /* Для предотвращения предупреждения Valgrind из mdbx_dump_val()
+         * вызванное через макрос DVAL_DEBUG() на выходе
+         * из cursor_set(MDBX_SET_KEY), которая вызывается как выше в цикле
+         * очистки, так и ниже в цикле заполнения зарезервированных элементов.
+         */
+        memset(data.iov_base, 0xBB, data.iov_len);
+#endif /* MDBX_DEBUG && (MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__) */
+
         /* Retry if tw.retired_pages[] grew during the Put() */
       } while (data.iov_len < MDBX_PNL_SIZEOF(txn->tw.retired_pages));
 
@@ -20892,11 +20916,13 @@ static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     }
     break;
   case MDBX_GET_MULTIPLE:
-    if (unlikely(data == NULL || !(mc->mc_flags & C_INITIALIZED)))
+    if (unlikely(!data))
       return MDBX_EINVAL;
-    if (unlikely(!(mc->mc_db->md_flags & MDBX_DUPFIXED)))
+    if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
       return MDBX_INCOMPATIBLE;
-    rc = MDBX_SUCCESS;
+    rc = (mc->mc_flags & C_INITIALIZED)
+             ? MDBX_SUCCESS
+             : cursor_set(mc, key, data, MDBX_SET).err;
     if ((mc->mc_xcursor->mx_cursor.mc_flags & (C_INITIALIZED | C_EOF)) !=
         C_INITIALIZED)
       break;
@@ -33339,10 +33365,10 @@ __dll_export
     const struct MDBX_version_info mdbx_version = {
         0,
         12,
-        7,
-        12,
-        {"2023-10-07T23:37:51+03:00", "1e4af0436e53a81235f151f2ce51195314bded49", "1aead6869a7eff1a85e400ab3eeecb4c8b904fe6",
-         "v0.12.7-12-g1aead686"},
+        8,
+        0,
+        {"2023-10-17T18:16:29+03:00", "24f7245ccd42c9bf34a93d07de56c598302e5e46", "02c7cf2a9c1004b3d3dae73cb006c9d7ed008665",
+         "v0.12.8-0-g02c7cf2a-dirty"},
         sourcery};
 
 __dll_export

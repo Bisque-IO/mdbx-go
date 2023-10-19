@@ -34,7 +34,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_BUILD_SOURCERY be4886e0b2530af39ab4092f80058315616d38bdebb393bda56731b2dfef990a_v0_12_7_12_g1aead686_dirty
+#define MDBX_BUILD_SOURCERY e89efc7cad8ad00694aa79df1189866eccb26abdbb9e8e9a1fb85934b91bcf8a_v0_12_8_0_g02c7cf2a_dirty
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -2087,7 +2087,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
  * to avoid use sequences of pages. */
 #ifndef MDBX_ENABLE_BIGFOOT
 #if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
-#define MDBX_ENABLE_BIGFOOT 0
+#define MDBX_ENABLE_BIGFOOT 1
 #else
 #define MDBX_ENABLE_BIGFOOT 0
 #endif
@@ -2146,7 +2146,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
  * \warning The database format depend on this option and libmdbx built with
  * different option value are incompatible. */
 #ifndef MDBX_PNL_ASCENDING
-#define MDBX_PNL_ASCENDING 1
+#define MDBX_PNL_ASCENDING 0
 #elif !(MDBX_PNL_ASCENDING == 0 || MDBX_PNL_ASCENDING == 1)
 #error MDBX_PNL_ASCENDING must be defined as 0 or 1
 #endif /* MDBX_PNL_ASCENDING */
@@ -4124,9 +4124,9 @@ static flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
 #define EOF (-1)
 #endif
 
-int optind = 1;
-int optopt;
-char *optarg;
+static int optind = 1;
+static int optopt;
+static char *optarg;
 
 int getopt(int argc, char *const argv[], const char *opts) {
   static int sp = 1;
@@ -4224,7 +4224,7 @@ static void dumpval(MDBX_val *v) {
   putchar('\n');
 }
 
-bool quiet = false, rescue = false;
+static bool quiet = false, rescue = false;
 const char *prog;
 static void error(const char *func, int rc) {
   if (!quiet)

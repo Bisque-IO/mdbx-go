@@ -3,8 +3,6 @@ package main
 import (
 	"os"
 	"strings"
-
-	"github.com/bisque-io/mdbx-go"
 )
 
 const usage = `Bisque libmdbx B-Tree Storage Engine Utilities
@@ -170,43 +168,6 @@ func main() {
 	}
 
 	switch strings.ToLower(args[0]) {
-	case "chk":
-		if len(args[1:]) == 0 {
-			println(usageChk)
-			os.Exit(1)
-		}
-		mdbx.ChkMain(args[1:]...)
-	case "copy":
-		if len(args[1:]) == 0 {
-			println(usageCopy)
-			os.Exit(1)
-		}
-		mdbx.CopyMain(args[1:]...)
-	case "dump":
-		if len(args[1:]) == 0 {
-			println(usageDump)
-			os.Exit(1)
-		}
-		mdbx.DumpMain(args[1:]...)
-	case "stat":
-		if len(args[1:]) == 0 {
-			println(usageStat)
-			os.Exit(1)
-		}
-		mdbx.StatMain(args[1:]...)
-	case "drop":
-		if len(args[1:]) == 0 {
-			println(usageDrop)
-			os.Exit(1)
-		}
-		mdbx.DropMain(args[1:]...)
-	case "load":
-		if len(args[1:]) == 0 {
-			println(usageLoad)
-			os.Exit(1)
-		}
-		mdbx.LoadMain(args[1:]...)
-
 	default:
 		println(usage)
 		os.Exit(1)

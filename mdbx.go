@@ -5,24 +5,25 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unsafe"
 
-	"github.com/bisque-io/mdbx-go/internal/capture"
-	"github.com/bisque-io/mdbx-go/internal/unsafecgo"
+	"knit/internal/unsafecgo"
 )
 
 /*
-//#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DMDBX_DEBUG=0 -DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1 -std=gnu11 -fvisibility=hidden -ffast-math  -fPIC -pthread -Wno-error=attributes -W -Wall -Werror -Wextra -Wpedantic -Wno-deprecated-declarations -Wno-format -Wno-implicit-fallthrough -Wno-unused-parameter -Wno-format-extra-args -Wno-missing-field-initializers
-#cgo !windows CFLAGS: -O2 -g -DMDBX_BUILD_FLAGS='' -DNDEBUG=1 -std=gnu++2 -DMDBX_PNL_ASCENDING=1 -DMDBX_ENABLE_BIGFOOT=1 -DMDBX_ENABLE_MINCORE=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_TXN_CHECKOWNER=0 -DMDBX_DEBUG=0 -DNDEBUG=1 -fPIC -ffast-math -std=gnu11 -fvisibility=hidden -pthread
+#cgo windows CFLAGS: -O3 -g -DNDEBUG=1 -std=gnu11 -Wno-unused-variable -fvisibility=hidden -ffast-math -fexceptions -fno-common -W -Wno-deprecated-declarations -Wno-bad-function-cast -Wno-cast-function-type -Wall -Wno-format -Wno-format-security -Wno-implicit-fallthrough -Wno-unused-parameter -Wno-unused-function -Wno-format-extra-args -Wno-missing-field-initializers -Wno-enum-int-mismatch -Wno-strict-prototypes -DMDBX_TXN_CHECKOWNER=0 -DMDBX_TXN_CHECKOWNER=0 -DMDBX_PNL_ASCENDING=1 -DMDBX_ENABLE_BIGFOOT=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=0 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_DEBUG=0 -DNDEBUG=1
+#cgo !windows CFLAGS: -O3 -g -DNDEBUG=1 -std=gnu11 -Wno-unused-variable -fvisibility=hidden -ffast-math -fexceptions -fno-common -W -Wno-deprecated-declarations -Wno-bad-function-cast -Wno-cast-function-type -Wall -Wno-format -Wno-format-security -Wno-implicit-fallthrough -Wno-unused-parameter -Wno-unused-function -Wno-format-extra-args -Wno-missing-field-initializers -Wno-enum-int-mismatch -Wno-strict-prototypes -DMDBX_TXN_CHECKOWNER=0 -DMDBX_PNL_ASCENDING=0 -DMDBX_ENABLE_BIGFOOT=1 -DMDBX_ENABLE_PREFAULT=1 -DMDBX_ENABLE_MADVISE=1 -DMDBX_ENABLE_PGOP_STAT=1 -DMDBX_DEBUG=0 -DNDEBUG=1 -DMDBX_LOCKING=MDBX_LOCKING_POSIX1988
 #cgo linux LDFLAGS: -lrt
+#cgo windows LDFLAGS: -lntdll
+
+#define MDBX_BUILD_FLAGS "${CFLAGS}"
 
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include "mdbx.h"
-#include "mdbx_utils.h"
+//#include "./config.h"
+#include "./mdbx.h"
 
 #ifndef likely
 #   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
@@ -827,371 +828,6 @@ func SysRamInfo() (result RamInfo, err Error) {
 // \retval Otherwise the error code.
 func IsReadAheadReasonable(expectedDBSize int64, redundancy int64) bool {
 	return C.mdbx_is_readahead_reasonable(C.size_t(expectedDBSize), C.intptr_t(redundancy)) == C.int(ErrResultTrue)
-}
-
-// Chk invokes the embedded mdbx_chk utility
-// usage: mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] dbpath
-//
-//	-V            print version and exit
-//	-v            more verbose, could be used multiple times
-//	-q            be quiet
-//	-c            force cooperative mode (don't try exclusive)
-//	-w            write-mode checking
-//	-d            disable page-by-page traversal of B-tree
-//	-i            ignore wrong order errors (for custom comparators case)
-//	-s subdb      process a specific subdatabase only
-//	-0|1|2        force using specific meta-page 0, or 2 for checking
-//	-t            turn to a specified meta-page on successful check
-//	-T            turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
-func Chk(args ...string) (result int32, output []byte, err error) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_chk")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	//	ch := make(chan string)
-	//	go func() {
-	//		defer close(ch)
-	//		err = capture.CaptureWithCGoChan(ch, func() {
-	//			result = int32(C.mdbx_chk((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	//		})
-	//	}()
-	//
-	//	var lines []string
-	//LOOP:
-	//	for {
-	//		select {
-	//		case line, ok := <-ch:
-	//			if !ok {
-	//				break LOOP
-	//			}
-	//			//fmt.Fprintf(out, "%s\n", line)
-	//			lines = append(lines, line)
-	//		}
-	//	}
-	//	for _, line := range lines {
-	//		println(line)
-	//	}
-
-	output, err = capture.CaptureWithCGo(func() {
-		result = int32(C.mdbx_chk((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	})
-	return
-}
-
-// ChkMain invokes the embedded mdbx_chk utility and exits the program.
-// usage: mdbx_chk [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] dbpath
-//
-//	-V            print version and exit
-//	-v            more verbose, could be used multiple times
-//	-q            be quiet
-//	-c            force cooperative mode (don't try exclusive)
-//	-w            write-mode checking
-//	-d            disable page-by-page traversal of B-tree
-//	-i            ignore wrong order errors (for custom comparators case)
-//	-s subdb      process a specific subdatabase only
-//	-0|1|2        force using specific meta-page 0, or 2 for checking
-//	-t            turn to a specified meta-page on successful check
-//	-T            turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
-func ChkMain(args ...string) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_chk")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	os.Exit(int(C.mdbx_chk((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
-}
-
-// Stat invokes the embedded mdbx_stat utility.
-// usage: mdbx_stat [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath
-//
-//	-V            print version and exit
-//	-q            be quiet
-//	-p            show statistics of page operations for current session
-//	-e            show whole DB info
-//	-f            show GC info
-//	-r            show readers
-//	-a            print stat of main DB and all subDBs
-//	-s name       print stat of only the specified named subDB
-//	              by default print stat of only the main DB
-func Stat(args ...string) (result int32, output []byte, err error) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_stat")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-	output, err = capture.CaptureWithCGo(func() {
-		result = int32(C.mdbx_stat((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	})
-	return
-}
-
-// StatMain invokes the embedded mdbx_stat utility and exits the program.
-// usage: mdbx_stat [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath
-//
-//	-V            print version and exit
-//	-q            be quiet
-//	-p            show statistics of page operations for current session
-//	-e            show whole DB info
-//	-f            show GC info
-//	-r            show readers
-//	-a            print stat of main DB and all subDBs
-//	-s name       print stat of only the specified named subDB
-//	              by default print stat of only the main DB
-func StatMain(args ...string) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_stat")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	os.Exit(int(C.mdbx_stat((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
-}
-
-// Copy invokes the embedded mdbx_copy utility.
-// usage: mdbx_copy [-V] [-q] [-c] [-u|U] src_path [dest_path]
-//
-//	-V 			print version and exit
-//	-q 			be quiet
-//	-c 			enable compactification (skip unused pages)
-//	-u 			warmup database before copying
-//	-U 			warmup and try lock database pages in memory before copying
-//	src_path 	source database
-//	dest_path 	destination (stdout if not specified)
-func Copy(args ...string) (result int32, output []byte, err error) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_copy")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-	output, err = capture.CaptureWithCGo(func() {
-		result = int32(C.mdbx_copy((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	})
-	return
-}
-
-// CopyMain invokes the embedded mdbx_copy utility and exits the program.
-// usage: mdbx_copy [-V] [-q] [-c] [-u|U] src_path [dest_path]
-//
-//	-V 			print version and exit
-//	-q 			be quiet
-//	-c 			enable compactification (skip unused pages)
-//	-u 			warmup database before copying
-//	-U 			warmup and try lock database pages in memory before copying
-//	src_path 	source database
-//	dest_path 	destination (stdout if not specified)
-func CopyMain(args ...string) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_copy")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	os.Exit(int(C.mdbx_copy((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
-}
-
-// Dump invokes the embedded mdbx_dump utility.
-// usage: mdbx_dump [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U]
-// dbpath
-//
-//	-V		print version and exit
-//	-q		be quiet
-//	-f		write to file instead of stdout
-//	-l		list subDBs and exit
-//	-p		use printable characters
-//	-r		rescue mode (ignore errors to dump corrupted DB)
-//	-a		dump main DB and all subDBs
-//	-s		name dump only the specified named subDB
-//	-u		warmup database before dumping
-//	-U		warmup and try lock database pages in memory before dumping
-//	    	by default dump only the main DB,
-func Dump(args ...string) (result int32, output []byte, err error) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_dump")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-	output, err = capture.CaptureWithCGo(func() {
-		result = int32(C.mdbx_dump((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	})
-	return
-}
-
-// DumpMain invokes the embedded mdbx_dump utility and exits the program.
-// usage: mdbx_dump [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U]
-// dbpath
-//
-//	-V		print version and exit
-//	-q		be quiet
-//	-f		write to file instead of stdout
-//	-l		list subDBs and exit
-//	-p		use printable characters
-//	-r		rescue mode (ignore errors to dump corrupted DB)
-//	-a		dump main DB and all subDBs
-//	-s		name dump only the specified named subDB
-//	-u		warmup database before dumping
-//	-U		warmup and try lock database pages in memory before dumping
-//	    	by default dump only the main DB,
-func DumpMain(args ...string) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_dump")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	os.Exit(int(C.mdbx_dump((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
-}
-
-// Drop invokes the embedded mdbx_drop utility.
-//
-// mdbx_drop %s [-V] [-q] [-d] [-s name] dbpath
-//
-//	-V print version and exit"
-//	-q be quiet"
-//	-d delete the specified database, don't just empty it"
-//	-s name\tdrop the specified named subDB"
-//	   by default empty the main DB
-func Drop(args ...string) (result int32, output []byte, err error) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_drop")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-	output, err = capture.CaptureWithCGo(func() {
-		result = int32(C.mdbx_drop_util((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	})
-	return
-}
-
-// DropMain invokes the embedded mdbx_drop utility and exits the program.
-//
-// mdbx_drop %s [-V] [-q] [-d] [-s name] dbpath
-//
-//	-V print version and exit"
-//	-q be quiet"
-//	-d delete the specified database, don't just empty it"
-//	-s name\tdrop the specified named subDB"
-//	   by default empty the main DB
-func DropMain(args ...string) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_drop_util")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	os.Exit(int(C.mdbx_drop_util((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
-}
-
-// Load invokes the embedded mdbx_load utility.
-//
-// mdbx load %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath
-//
-//	-V        print version and exit
-//	-q        be quiet
-//	-a        append records in input order (required for custom comparators)
-//	-f file   read from file instead of stdin
-//	-s name   load into specified named subDB
-//	-N        don't overwrite existing records when loading, just skip ones
-//	-p        purge subDB before loading
-//	-T        read plaintext
-//	-r        rescue mode (ignore errors to load corrupted DB dump)
-//	-n        don't use subdirectory for newly created database (MDBX_NOSUBDIR)
-func Load(args ...string) (result int32, output []byte, err error) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_load")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-	output, err = capture.CaptureWithCGo(func() {
-		result = int32(C.mdbx_load((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0]))))
-	})
-	return
-}
-
-// LoadMain invokes the embedded mdbx_load utility and exits the program.
-//
-// mdbx load %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath
-//
-//	-V        print version and exit
-//	-q        be quiet
-//	-a        append records in input order (required for custom comparators)
-//	-f file   read from file instead of stdin
-//	-s name   load into specified named subDB
-//	-N        don't overwrite existing records when loading, just skip ones
-//	-p        purge subDB before loading
-//	-T        read plaintext
-//	-r        rescue mode (ignore errors to load corrupted DB dump)
-//	-n        don't use subdirectory for newly created database (MDBX_NOSUBDIR)
-func LoadMain(args ...string) {
-	argv := make([]*C.char, len(args)+1)
-	argv[0] = C.CString("mdbx_load")
-	for i, arg := range args {
-		argv[i+1] = C.CString(arg)
-	}
-	defer func() {
-		for _, arg := range argv {
-			C.free(unsafe.Pointer(arg))
-		}
-	}()
-
-	os.Exit(int(C.mdbx_load((C.int)(len(argv)), (**C.char)(unsafe.Pointer(&argv[0])))))
 }
 
 type LogLevel int32
@@ -2700,30 +2336,30 @@ func NewEnv() (*Env, Error) {
 	return env, err
 }
 
-// FD returns the open file descriptor (or Windows file handle) for the given
-// environment.  An error is returned if the environment has not been
-// successfully Opened (where C API just retruns an invalid handle).
+//// FD returns the open file descriptor (or Windows file handle) for the given
+//// environment.  An error is returned if the environment has not been
+//// successfully Opened (where C API just retruns an invalid handle).
+////
+//// See mdbx_env_get_fd.
+//func (env *Env) FD() (uintptr, error) {
+//	// fdInvalid is the value -1 as a uintptr, which is used by MDBX in the
+//	// case that env has not been opened yet.  the strange construction is done
+//	// to avoid constant value overflow errors at compile time.
+//	const fdInvalid = ^uintptr(0)
 //
-// See mdbx_env_get_fd.
-func (env *Env) FD() (uintptr, error) {
-	// fdInvalid is the value -1 as a uintptr, which is used by MDBX in the
-	// case that env has not been opened yet.  the strange construction is done
-	// to avoid constant value overflow errors at compile time.
-	const fdInvalid = ^uintptr(0)
-
-	var mf C.mdbx_filehandle_t
-	err := Error(C.mdbx_env_get_fd(env.env, &mf))
-	//err := operrno("mdbx_env_get_fd", ret)
-	if err != ErrSuccess {
-		return 0, err
-	}
-	fd := uintptr(mf)
-
-	if fd == fdInvalid {
-		return 0, os.ErrClosed
-	}
-	return fd, nil
-}
+//	var mf C.mdbx_filehandle_t
+//	err := Error(C.mdbx_env_get_fd(env.env, &mf))
+//	//err := operrno("mdbx_env_get_fd", ret)
+//	if err != ErrSuccess {
+//		return 0, err
+//	}
+//	fd := uintptr(mf)
+//
+//	if fd == fdInvalid {
+//		return 0, os.ErrClosed
+//	}
+//	return fd, nil
+//}
 
 // ReaderCheck clears stale entries from the reader lock table and returns the
 // number of entries cleared.
@@ -3399,52 +3035,52 @@ type EnvInfo struct {
 }
 
 func (info *EnvInfo) Hydrate(from *C.MDBX_envinfo) {
-	info.Geo.Lower = uint64(from.mi_geo.lower)
-	info.Geo.Upper = uint64(from.mi_geo.upper)
-	info.Geo.Current = uint64(from.mi_geo.current)
-	info.Geo.Shrink = uint64(from.mi_geo.shrink)
-	info.Geo.Grow = uint64(from.mi_geo.grow)
-	info.MapSize = uint64(from.mi_mapsize)
-	info.LastPageNumber = uint64(from.mi_last_pgno)
-	info.RecentTxnID = uint64(from.mi_recent_txnid)
-	info.LatterReaderTxnID = uint64(from.mi_latter_reader_txnid)
-	info.SelfLatterReaderTxnID = uint64(from.mi_self_latter_reader_txnid)
-	info.Meta0TxnID = uint64(from.mi_meta0_txnid)
-	info.MIMeta0Sign = uint64(from.mi_meta0_sign)
-	info.Meta1TxnID = uint64(from.mi_meta1_txnid)
-	info.MIMeta1Sign = uint64(from.mi_meta1_sign)
-	info.Meta2TxnID = uint64(from.mi_meta2_txnid)
-	info.MIMeta2Sign = uint64(from.mi_meta2_sign)
-	info.MaxReaders = uint32(from.mi_maxreaders)
-	info.NumReaders = uint32(from.mi_numreaders)
-	info.DXBPageSize = uint32(from.mi_dxb_pagesize)
-	info.SysPageSize = uint32(from.mi_sys_pagesize)
-	info.BootID.Current.X = uint64(from.mi_bootid.current.x)
-	info.BootID.Current.Y = uint64(from.mi_bootid.current.y)
-	info.BootID.Meta0.X = uint64(from.mi_bootid.meta0.x)
-	info.BootID.Meta0.Y = uint64(from.mi_bootid.meta0.y)
-	info.BootID.Meta1.X = uint64(from.mi_bootid.meta1.x)
-	info.BootID.Meta1.Y = uint64(from.mi_bootid.meta1.y)
-	info.BootID.Meta2.X = uint64(from.mi_bootid.meta2.x)
-	info.BootID.Meta2.Y = uint64(from.mi_bootid.meta2.y)
-	info.UnSyncVolume = uint64(from.mi_unsync_volume)
-	info.AutoSyncThreshold = uint64(from.mi_autosync_threshold)
-	info.SinceSyncSeconds16Dot16 = uint32(from.mi_since_sync_seconds16dot16)
-	info.AutoSyncPeriodSeconds16Dot16 = uint32(from.mi_autosync_period_seconds16dot16)
-	info.SinceReaderCheckSeconds16Dot16 = uint32(from.mi_since_reader_check_seconds16dot16)
-	info.Mode = uint32(from.mi_mode)
-	info.PGOpStat.Newly = uint64(from.mi_pgop_stat.newly)
-	info.PGOpStat.Cow = uint64(from.mi_pgop_stat.cow)
-	info.PGOpStat.Clone = uint64(from.mi_pgop_stat.clone)
-	info.PGOpStat.Split = uint64(from.mi_pgop_stat.split)
-	info.PGOpStat.Merge = uint64(from.mi_pgop_stat.merge)
-	info.PGOpStat.Spill = uint64(from.mi_pgop_stat.spill)
-	info.PGOpStat.UnSpill = uint64(from.mi_pgop_stat.unspill)
-	info.PGOpStat.Wops = uint64(from.mi_pgop_stat.wops)
-	info.PGOpStat.PreFault = uint64(from.mi_pgop_stat.prefault)
-	info.PGOpStat.Mincore = uint64(from.mi_pgop_stat.mincore)
-	info.PGOpStat.Msync = uint64(from.mi_pgop_stat.msync)
-	info.PGOpStat.Fsync = uint64(from.mi_pgop_stat.fsync)
+	//info.Geo.Lower = uint64(from.mi_geo.lower)
+	//info.Geo.Upper = uint64(from.mi_geo.upper)
+	//info.Geo.Current = uint64(from.mi_geo.current)
+	//info.Geo.Shrink = uint64(from.mi_geo.shrink)
+	//info.Geo.Grow = uint64(from.mi_geo.grow)
+	//info.MapSize = uint64(from.mi_mapsize)
+	//info.LastPageNumber = uint64(from.mi_last_pgno)
+	//info.RecentTxnID = uint64(from.mi_recent_txnid)
+	//info.LatterReaderTxnID = uint64(from.mi_latter_reader_txnid)
+	//info.SelfLatterReaderTxnID = uint64(from.mi_self_latter_reader_txnid)
+	//info.Meta0TxnID = uint64(from.mi_meta0_txnid)
+	//info.MIMeta0Sign = uint64(from.mi_meta0_sign)
+	//info.Meta1TxnID = uint64(from.mi_meta1_txnid)
+	//info.MIMeta1Sign = uint64(from.mi_meta1_sign)
+	//info.Meta2TxnID = uint64(from.mi_meta2_txnid)
+	//info.MIMeta2Sign = uint64(from.mi_meta2_sign)
+	//info.MaxReaders = uint32(from.mi_maxreaders)
+	//info.NumReaders = uint32(from.mi_numreaders)
+	//info.DXBPageSize = uint32(from.mi_dxb_pagesize)
+	//info.SysPageSize = uint32(from.mi_sys_pagesize)
+	//info.BootID.Current.X = uint64(from.mi_bootid.current.x)
+	//info.BootID.Current.Y = uint64(from.mi_bootid.current.y)
+	//info.BootID.Meta0.X = uint64(from.mi_bootid.meta0.x)
+	//info.BootID.Meta0.Y = uint64(from.mi_bootid.meta0.y)
+	//info.BootID.Meta1.X = uint64(from.mi_bootid.meta1.x)
+	//info.BootID.Meta1.Y = uint64(from.mi_bootid.meta1.y)
+	//info.BootID.Meta2.X = uint64(from.mi_bootid.meta2.x)
+	//info.BootID.Meta2.Y = uint64(from.mi_bootid.meta2.y)
+	//info.UnSyncVolume = uint64(from.mi_unsync_volume)
+	//info.AutoSyncThreshold = uint64(from.mi_autosync_threshold)
+	//info.SinceSyncSeconds16Dot16 = uint32(from.mi_since_sync_seconds16dot16)
+	//info.AutoSyncPeriodSeconds16Dot16 = uint32(from.mi_autosync_period_seconds16dot16)
+	//info.SinceReaderCheckSeconds16Dot16 = uint32(from.mi_since_reader_check_seconds16dot16)
+	//info.Mode = uint32(from.mi_mode)
+	//info.PGOpStat.Newly = uint64(from.mi_pgop_stat.newly)
+	//info.PGOpStat.Cow = uint64(from.mi_pgop_stat.cow)
+	//info.PGOpStat.Clone = uint64(from.mi_pgop_stat.clone)
+	//info.PGOpStat.Split = uint64(from.mi_pgop_stat.split)
+	//info.PGOpStat.Merge = uint64(from.mi_pgop_stat.merge)
+	//info.PGOpStat.Spill = uint64(from.mi_pgop_stat.spill)
+	//info.PGOpStat.UnSpill = uint64(from.mi_pgop_stat.unspill)
+	//info.PGOpStat.Wops = uint64(from.mi_pgop_stat.wops)
+	//info.PGOpStat.PreFault = uint64(from.mi_pgop_stat.prefault)
+	//info.PGOpStat.Mincore = uint64(from.mi_pgop_stat.mincore)
+	//info.PGOpStat.Msync = uint64(from.mi_pgop_stat.msync)
+	//info.PGOpStat.Fsync = uint64(from.mi_pgop_stat.fsync)
 }
 
 func (env *Env) Info(tx *Tx) (EnvInfo, Error) {
@@ -4129,7 +3765,10 @@ type DBI uint32
 // Val
 //////////////////////////////////////////////////////////////////////////////////////////
 
-type Val syscall.Iovec
+type Val struct {
+	Base *byte
+	Len  uint64
+}
 
 func (v *Val) String() string {
 	b := make([]byte, v.Len)
@@ -4159,11 +3798,12 @@ func (v *Val) Bytes() []byte {
 }
 
 func (v *Val) UnsafeBytes() []byte {
-	return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(v.Base)),
-		Len:  int(v.Len),
-		Cap:  int(v.Len),
-	}))
+	return unsafe.Slice(v.Base, v.Len)
+	//return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+	//	Data: uintptr(unsafe.Pointer(v.Base)),
+	//	Len:  int(v.Len),
+	//	Cap:  int(v.Len),
+	//}))
 }
 
 func (v *Val) Copy(dst []byte) []byte {
@@ -4547,6 +4187,9 @@ type CommitLatency struct {
 // \ingroup c_statinfo
 // \warning This function may be changed in future releases.
 func (tx *Tx) CommitEx(latency *CommitLatency) Error {
+	if tx == nil || tx.ptr == nil {
+		return ErrBadTXN
+	}
 	args := struct {
 		txn     uintptr
 		latency uintptr
@@ -4653,6 +4296,9 @@ func (tx *Tx) Commit() Error {
 //
 // \retval MDBX_EINVAL           Transaction handle is NULL.
 func (tx *Tx) Abort() Error {
+	if tx == nil || tx.ptr == nil {
+		return ErrBadTXN
+	}
 	args := struct {
 		txn    uintptr
 		result Error
@@ -4676,6 +4322,9 @@ func (tx *Tx) Abort() Error {
 // \see mdbx_txn_abort() \see mdbx_txn_reset() \see mdbx_txn_commit()
 // \returns A non-zero error value on failure and 0 on success.
 func (tx *Tx) Break() Error {
+	if tx == nil || tx.ptr == nil {
+		return ErrBadTXN
+	}
 	args := struct {
 		txn    uintptr
 		result Error

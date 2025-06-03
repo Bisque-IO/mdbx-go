@@ -25,52 +25,12 @@ func TestSysRamInfo(t *testing.T) {
 	if err != ErrSuccess {
 		t.Fatal(err)
 	}
+	t.Log("SysRamInfo:", info)
 	fmt.Println(stringify(info))
 }
 
 func TestIsReadAheadReasonable(t *testing.T) {
 	fmt.Println("IsReadAheadReasonable:", IsReadAheadReasonable(1024*1024*1024*4, 0))
-}
-
-func chkPrint(args ...string) {
-	_, out, err := Chk("-v", "-w", "testdata/db.dat")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(out))
-}
-
-func TestChk(t *testing.T) {
-	//defer os.Remove("testdata/db.dat")
-	//defer os.Remove("testdata/db.dat-lck")
-	TestOpen(t)
-	_, out, err := Chk("-v", "-w", "testdata/db.dat")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(out))
-}
-
-func TestChkVersion(t *testing.T) {
-	defer os.Remove("testdata/db.dat")
-	defer os.Remove("testdata/db.dat-lck")
-	TestOpen(t)
-	_, out, err := Chk("-V")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(out))
-}
-
-func TestStat(t *testing.T) {
-	defer os.Remove("testdata/db.dat")
-	defer os.Remove("testdata/db.dat-lck")
-	TestOpen(t)
-	_, out, err := Stat("-w", "testdata/db.dat")
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(out))
 }
 
 func TestOpen(t *testing.T) {
@@ -362,7 +322,6 @@ func TestGC(t *testing.T) {
 	if err = env.Close(false); err != ErrSuccess {
 		fmt.Println(err)
 	}
-	chkPrint("-v", "-w", "testdata/db.dat")
 }
 
 type Engine struct {
@@ -391,10 +350,10 @@ func initDB(path string, flags EnvFlags) (*Engine, Error) {
 	}
 	engine.env = env
 	if err = env.SetGeometry(Geometry{
-		SizeLower:       1024 * 1024 * 16,
-		SizeNow:         1024 * 1024 * 16,
+		SizeLower:       1024 * 1024 * 64,
+		SizeNow:         1024 * 1024 * 64,
 		SizeUpper:       1024 * 1024 * 1024 * 16,
-		GrowthStep:      1024 * 1024 * 16,
+		GrowthStep:      1024 * 1024 * 64,
 		ShrinkThreshold: 0,
 		PageSize:        65536,
 	}); err != ErrSuccess {
@@ -413,7 +372,7 @@ func initDB(path string, flags EnvFlags) (*Engine, Error) {
 		path,
 		//EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|EnvSyncDurable,
 		// EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|EnvSafeNoSync|EnvWriteMap,
-		EnvNoTLS|EnvNoMemInit|EnvCoalesce|EnvLIFOReclaim|flags|EnvWriteMap,
+		EnvNoTLS|EnvNoMemInit|flags|EnvWriteMap|EnvUtterlyNoSync,
 		0664,
 	)
 
@@ -491,7 +450,7 @@ func BenchmarkTxn_Put(b *testing.B) {
 }
 
 func BenchmarkTxn_PutCursor(b *testing.B) {
-	defer os.RemoveAll("testdata/db")
+	//defer os.RemoveAll("testdata/db")
 	engine, err := initDB("testdata/db/"+strconv.Itoa(b.N), EnvSafeNoSync)
 	if err != ErrSuccess {
 		b.Fatal(err)
@@ -534,7 +493,7 @@ func BenchmarkTxn_PutCursor(b *testing.B) {
 			}
 		}
 
-		const batchSize = 1000000
+		const batchSize = 10000000
 		for i := 0; i < b.N; i += batchSize {
 			end := i + batchSize
 			if end > b.N {
@@ -938,9 +897,9 @@ func BenchmarkWrite(b *testing.B) {
 		}
 		b.Run("MDBX("+name+") Append "+batchSizeString, func(b *testing.B) {
 			defer func() {
-				if err := Delete("testdata/db", DeleteModeWaitForUnused); err != ErrSuccess {
-					b.Fatal(err)
-				}
+				//if err := Delete("testdata/db", DeleteModeWaitForUnused); err != ErrSuccess {
+				//	b.Fatal(err)
+				//}
 				defer os.RemoveAll("testdata/db")
 			}()
 			engine, err := initDB("testdata/db", flags)
@@ -1010,15 +969,21 @@ func BenchmarkWrite(b *testing.B) {
 		})
 	}
 
-	runMDBXAppendBatched(all, "SyncDurable", EnvSyncDurable)
-	runMDBXAppendBatched(100000, "SyncDurable", EnvSyncDurable)
-	runMDBXAppendBatched(10000, "SyncDurable", EnvSyncDurable)
-	runMDBXAppendBatched(1000, "SyncDurable", EnvSyncDurable)
-	runMDBXAppendBatched(100, "SyncDurable", EnvSyncDurable)
+	//runMDBXAppendBatched(all, "SyncDurable", EnvSyncDurable)
+	//runMDBXAppendBatched(100000, "SyncDurable", EnvSyncDurable)
+	//runMDBXAppendBatched(10000, "SyncDurable", EnvSyncDurable)
+	//runMDBXAppendBatched(1000, "SyncDurable", EnvSyncDurable)
+	//runMDBXAppendBatched(100, "SyncDurable", EnvSyncDurable)
+	//
+	//runMDBXAppendBatched(all, "SafeNoSync", EnvSafeNoSync)
+	//runMDBXAppendBatched(100000, "SafeNoSync", EnvSafeNoSync)
+	//runMDBXAppendBatched(10000, "SafeNoSync", EnvSafeNoSync)
+	//runMDBXAppendBatched(1000, "SafeNoSync", EnvSafeNoSync)
+	//runMDBXAppendBatched(100, "SafeNoSync", EnvSafeNoSync)
 
-	runMDBXAppendBatched(all, "SafeNoSync", EnvSafeNoSync)
-	runMDBXAppendBatched(100000, "SafeNoSync", EnvSafeNoSync)
-	runMDBXAppendBatched(10000, "SafeNoSync", EnvSafeNoSync)
-	runMDBXAppendBatched(1000, "SafeNoSync", EnvSafeNoSync)
-	runMDBXAppendBatched(100, "SafeNoSync", EnvSafeNoSync)
+	runMDBXAppendBatched(all, "NoSync", EnvUtterlyNoSync)
+	runMDBXAppendBatched(100000, "NoSync", EnvUtterlyNoSync)
+	runMDBXAppendBatched(10000, "NoSync", EnvUtterlyNoSync)
+	runMDBXAppendBatched(1000, "NoSync", EnvUtterlyNoSync)
+	runMDBXAppendBatched(100, "NoSync", EnvUtterlyNoSync)
 }

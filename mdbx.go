@@ -1,6 +1,7 @@
 package mdbx
 
 import (
+	"knit/pkg/alloc"
 	"os"
 	"reflect"
 	"strings"
@@ -8,7 +9,7 @@ import (
 	"time"
 	"unsafe"
 
-	"knit/internal/unsafecgo"
+	"knit/pkg/unsafecgo"
 )
 
 /*
@@ -3771,7 +3772,7 @@ type Val struct {
 }
 
 func (v *Val) String() string {
-	b := make([]byte, v.Len)
+	b := alloc.Alloc(int(v.Len))
 	copy(b, *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(v.Base)),
 		Len:  int(v.Len),
@@ -3788,36 +3789,23 @@ func (v *Val) UnsafeString() string {
 }
 
 func (v *Val) Bytes() []byte {
-	b := make([]byte, v.Len)
-	copy(b, *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(v.Base)),
-		Len:  int(v.Len),
-		Cap:  int(v.Len),
-	})))
+	b := alloc.Alloc(int(v.Len))
+	copy(b, unsafe.Slice(v.Base, v.Len))
 	return b
 }
 
 func (v *Val) UnsafeBytes() []byte {
 	return unsafe.Slice(v.Base, v.Len)
-	//return *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-	//	Data: uintptr(unsafe.Pointer(v.Base)),
-	//	Len:  int(v.Len),
-	//	Cap:  int(v.Len),
-	//}))
 }
 
 func (v *Val) Copy(dst []byte) []byte {
-	src := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(v.Base)),
-		Len:  int(v.Len),
-		Cap:  int(v.Len),
-	}))
+	src := unsafe.Slice(v.Base, v.Len)
 	if cap(dst) >= int(v.Len) {
 		dst = dst[0:v.Len]
 		copy(dst, src)
 		return dst
 	}
-	dst = make([]byte, v.Len)
+	dst = alloc.Alloc(int(v.Len))
 	copy(dst, src)
 	return dst
 }

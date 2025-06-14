@@ -9,7 +9,7 @@ import (
 	"time"
 	"unsafe"
 
-	"knit/pkg/unsafecgo"
+	"knit/pkg/cgo"
 )
 
 /*
@@ -902,7 +902,7 @@ func (e Error) Error() string {
 		code: int32(e),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_strerror), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_strerror), ptr, 0)
 	str := C.GoString((*C.char)(unsafe.Pointer(args.result)))
 	return str
 }
@@ -2932,7 +2932,7 @@ type Geometry struct {
 func (env *Env) SetGeometry(args Geometry) Error {
 	args.env = uintptr(unsafe.Pointer(env.env))
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_env_set_geometry), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_env_set_geometry), ptr, 0)
 	return args.err
 }
 
@@ -4020,7 +4020,7 @@ func (env *Env) Begin(txn *Tx, flags TxFlags) Error {
 		flags:  flags,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_begin_ex), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_begin_ex), ptr, 0)
 	return args.result
 }
 
@@ -4097,7 +4097,7 @@ func (tx *Tx) Info(info *TxInfo) Error {
 		info: uintptr(unsafe.Pointer(info)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_info), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_info), ptr, 0)
 	return args.result
 }
 
@@ -4119,7 +4119,7 @@ func (tx *Tx) Flags() int32 {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_flags), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_flags), ptr, 0)
 	return args.flags
 }
 
@@ -4143,7 +4143,7 @@ func (tx *Tx) ID() uint64 {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_id), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_id), ptr, 0)
 	return args.id
 }
 
@@ -4187,7 +4187,7 @@ func (tx *Tx) CommitEx(latency *CommitLatency) Error {
 		latency: uintptr(unsafe.Pointer(latency)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_commit_ex), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_commit_ex), ptr, 0)
 	return args.result
 }
 
@@ -4294,7 +4294,7 @@ func (tx *Tx) Abort() Error {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_abort), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_abort), ptr, 0)
 	return args.result
 }
 
@@ -4320,7 +4320,7 @@ func (tx *Tx) Break() Error {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_break), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_break), ptr, 0)
 	return args.result
 }
 
@@ -4372,7 +4372,7 @@ func (tx *Tx) Reset() Error {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_reset), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_reset), ptr, 0)
 	return args.result
 }
 
@@ -4412,7 +4412,7 @@ func (tx *Tx) Renew() Error {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_txn_renew), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_txn_renew), ptr, 0)
 	return args.result
 }
 
@@ -4449,7 +4449,7 @@ func (tx *Tx) PutCanary(canary *Canary) Error {
 		canary: uintptr(unsafe.Pointer(canary)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_canary_put), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_canary_put), ptr, 0)
 	return args.result
 }
 
@@ -4474,7 +4474,7 @@ func (tx *Tx) GetCanary(canary *Canary) Error {
 		canary: uintptr(unsafe.Pointer(canary)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_canary_get), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_canary_get), ptr, 0)
 	return args.result
 }
 
@@ -4516,7 +4516,7 @@ func (tx *Tx) EnvInfo(env *Env, info *EnvInfo) Error {
 		size: unsafe.Sizeof(C.MDBX_envinfo{}),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_env_info_ex), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_env_info_ex), ptr, 0)
 	return Error(args.result)
 }
 
@@ -4712,7 +4712,7 @@ func (tx *Tx) DBIStat(dbi DBI, stat *Stats) Error {
 		dbi:  uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_dbi_stat), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_dbi_stat), ptr, 0)
 	return args.result
 }
 
@@ -4742,7 +4742,7 @@ func (tx *Tx) DBIFlags(dbi DBI) (DBFlags, DBIState, Error) {
 		dbi:   uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_dbi_flags_ex), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_dbi_flags_ex), ptr, 0)
 	return flags, state, args.result
 }
 
@@ -4772,7 +4772,7 @@ func (tx *Tx) Drop(dbi DBI, del bool) Error {
 		args.del = 1
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_drop), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_drop), ptr, 0)
 	return args.result
 }
 
@@ -4823,7 +4823,7 @@ func (tx *Tx) Get(dbi DBI, key *Val, data *Val) Error {
 		dbi:  uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_get), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_get), ptr, 0)
 	return args.result
 }
 
@@ -4875,7 +4875,7 @@ func (tx *Tx) GetEqualOrGreat(dbi DBI, key *Val, data *Val) Error {
 		dbi:  uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_get_equal_or_great), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_get_equal_or_great), ptr, 0)
 	return args.result
 }
 
@@ -4933,7 +4933,7 @@ func (tx *Tx) GetEx(dbi DBI, key *Val, data *Val) (int, Error) {
 		dbi:         uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_get_ex), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_get_ex), ptr, 0)
 	return int(valuesCount), args.result
 }
 
@@ -5043,7 +5043,7 @@ func (tx *Tx) Put(dbi DBI, key *Val, data *Val, flags PutFlags) Error {
 		flags: uint32(flags),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_put), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_put), ptr, 0)
 	return args.result
 }
 
@@ -5121,7 +5121,7 @@ func (tx *Tx) Replace(
 		flags:   uint32(flags),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_replace), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_replace), ptr, 0)
 	return args.result
 }
 
@@ -5168,7 +5168,7 @@ func (tx *Tx) Delete(dbi DBI, key *Val, data *Val) Error {
 		dbi:  uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_del), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_del), ptr, 0)
 	return args.result
 }
 
@@ -5194,7 +5194,7 @@ func (tx *Tx) DeleteIntegerRange(dbi DBI, low, high, maxCount uint64) (first uin
 		dbi:      uint32(dbi),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_del_integer_range), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_del_integer_range), ptr, 0)
 	return args.first, args.last, args.count, args.result
 }
 
@@ -5242,7 +5242,7 @@ func (tx *Tx) IsDirty(ptr uintptr) Error {
 		txn: uintptr(unsafe.Pointer(tx.ptr)),
 		ptr: ptr,
 	}
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_is_dirty), uintptr(unsafe.Pointer(&args)), 0)
+	cgo.ASM((*byte)(C.do_mdbx_is_dirty), uintptr(unsafe.Pointer(&args)), 0)
 	return Error(args.result)
 }
 
@@ -5287,7 +5287,7 @@ func (tx *Tx) DBISequence(dbi DBI, increment uint64) (result uint64, err Error) 
 		dbi:       uintptr(dbi),
 		increment: increment,
 	}
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_dbi_sequence), uintptr(unsafe.Pointer(&args)), 0)
+	cgo.ASM((*byte)(C.do_mdbx_dbi_sequence), uintptr(unsafe.Pointer(&args)), 0)
 	return args.result, Error(args.outcome)
 }
 
@@ -5330,7 +5330,7 @@ func NewCursor() Cursor {
 		cursor  *C.MDBX_cursor
 	}{}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_create), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_create), ptr, 0)
 	return Cursor{ptr: args.cursor}
 }
 
@@ -5376,7 +5376,7 @@ func (tx *Tx) Bind(cursor *Cursor, dbi DBI) Error {
 		dbi:    dbi,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_bind), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_bind), ptr, 0)
 	return args.result
 }
 
@@ -5430,7 +5430,7 @@ func (tx *Tx) OpenCursor(dbi DBI) (Cursor, Error) {
 		dbi:    dbi,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_open), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_open), ptr, 0)
 	return Cursor{ptr: cursor}, args.result
 }
 
@@ -5454,7 +5454,7 @@ func (cur *Cursor) Close() Error {
 		return ErrSuccess
 	}
 	ptr := uintptr(unsafe.Pointer(cur.ptr))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_close), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_close), ptr, 0)
 	cur.ptr = nil
 	return ErrSuccess
 }
@@ -5497,7 +5497,7 @@ func (cur *Cursor) Renew(tx *Tx) Error {
 		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_renew), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_renew), ptr, 0)
 	return args.result
 }
 
@@ -5513,7 +5513,7 @@ func (cur *Cursor) Tx() Tx {
 		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_txn), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_txn), ptr, 0)
 	return Tx{ptr: (*C.MDBX_txn)(unsafe.Pointer(args.txn))}
 }
 
@@ -5529,7 +5529,7 @@ func (cur *Cursor) DBI() DBI {
 		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_dbi), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_dbi), ptr, 0)
 	return args.dbi
 }
 
@@ -5553,7 +5553,7 @@ func (cur *Cursor) Copy(dest *Cursor) Error {
 		dest: uintptr(unsafe.Pointer(dest.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_copy), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_copy), ptr, 0)
 	return args.result
 }
 
@@ -5596,7 +5596,7 @@ func (cur *Cursor) Get(key *Val, data *Val, op CursorOp) Error {
 		op:     op,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_get), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_get), ptr, 0)
 	return args.result
 }
 
@@ -5658,7 +5658,7 @@ func (cur *Cursor) GetBatch(data []Val, op CursorOp) ([]Val, Error) {
 		limit:  uintptr(len(data)),
 		op:     op,
 	}
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_get_batch), uintptr(unsafe.Pointer(&args)), 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_get_batch), uintptr(unsafe.Pointer(&args)), 0)
 	data = data[0:args.count]
 	return data, args.result
 }
@@ -5768,7 +5768,7 @@ func (cur *Cursor) Put(key *Val, data *Val, flags PutFlags) Error {
 		flags:  flags,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_put), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_put), ptr, 0)
 	return args.result
 }
 
@@ -5820,7 +5820,7 @@ func (cur *Cursor) Delete(flags PutFlags) Error {
 		flags:  flags,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_del), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_del), ptr, 0)
 	return args.result
 }
 
@@ -5845,7 +5845,7 @@ func (cur *Cursor) DeleteIntegerRange(low, high, maxCount uint64) (first uint64,
 		maxCount: maxCount,
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_del_integer_range), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_del_integer_range), ptr, 0)
 	return args.first, args.last, args.count, args.result
 }
 
@@ -5880,7 +5880,7 @@ func (cur *Cursor) Count() (int, Error) {
 		count:  uintptr(unsafe.Pointer(&count)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_count), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_count), ptr, 0)
 	return int(count), args.result
 }
 
@@ -5908,7 +5908,7 @@ func (cur *Cursor) EOF() Error {
 		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_eof), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_eof), ptr, 0)
 	return args.result
 }
 
@@ -5932,7 +5932,7 @@ func (cur *Cursor) OnFirst() Error {
 		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_on_first), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_on_first), ptr, 0)
 	return args.result
 }
 
@@ -5956,7 +5956,7 @@ func (cur *Cursor) OnLast() Error {
 		cursor: uintptr(unsafe.Pointer(cur.ptr)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_cursor_on_last), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_cursor_on_last), ptr, 0)
 	return args.result
 }
 
@@ -6018,6 +6018,6 @@ func EstimateDistance(first, last *Cursor) (int64, Error) {
 		distance: uintptr(unsafe.Pointer(&distance)),
 	}
 	ptr := uintptr(unsafe.Pointer(&args))
-	unsafecgo.NonBlocking((*byte)(C.do_mdbx_estimate_distance), ptr, 0)
+	cgo.ASM((*byte)(C.do_mdbx_estimate_distance), ptr, 0)
 	return distance, args.result
 }
